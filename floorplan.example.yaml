@@ -1,0 +1,7 @@
+---
+- prefix: dumps/people
+  query: >-
+    SELECT name, email, birthyear FROM people;
+- prefix: dumps/cities
+  query: >-
+    SELECT name AS city_name, zip, country FROM cities;
