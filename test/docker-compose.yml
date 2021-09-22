@@ -1,0 +1,31 @@
+version: "3"
+services:
+  db:
+    image: docker.io/library/postgres
+    restart: always
+    environment:
+      - POSTGRES_PASSWORD=floorist
+      - POSTGRES_USER=floorist
+      - POSTGRES_DB=floorist
+    ports:
+      - 5432:5432
+  minio:
+    image: quay.io/cloudservices/minio
+    command: server /data
+    ports:
+      - 9000:9000
+    environment:
+      - MINIO_ACCESS_KEY=floorist
+      - MINIO_SECRET_KEY=floorist
+  createbucket:
+    image: docker.io/minio/mc
+    depends_on:
+      - minio
+    links:
+      - minio
+    entrypoint: /bin/sh
+    command: -c '
+      until /usr/bin/mc config host add myminio http://minio:9000 floorist floorist >/dev/null; do sleep 1; done ;
+      /usr/bin/mc mb myminio/floorist;
+      /usr/bin/mc policy set download myminio/floorist;
+      exit 0;'
