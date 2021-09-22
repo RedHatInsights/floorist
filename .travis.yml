@@ -1,0 +1,20 @@
+virt: lxd
+language: python
+services:
+  - docker
+  - postgresql
+python:
+  - "3.9"
+install:
+  - cp test/env.yaml.travis test/env.yaml
+  - docker run --rm --name=minio -d --net=host -e MINIO_ACCESS_KEY=floorist -e MINIO_SECRET_KEY=floorist quay.io/cloudservices/minio server /data
+  - pip install -r app-src/requirements.txt
+  - pip install pytest
+before_script:
+  - psql -c 'create database floorist;' -U postgres
+  - docker run --rm --net=host --entrypoint /bin/sh docker.io/minio/mc -c 'until /usr/bin/mc config host add myminio http://localhost:9000 floorist floorist >/dev/null; do sleep 1; done ; /usr/bin/mc mb myminio/floorist; /usr/bin/mc policy set download myminio/floorist; exit 0';
+script:
+  - pytest
+after_script:
+  - docker stop minio
+cache: pip
