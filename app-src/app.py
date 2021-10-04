@@ -58,6 +58,8 @@ def main():
 
   logging.info(f'Dumped {dumped_count} from total of {dump_count}')
 
+  conn.close()
+
   if dumped_count != dump_count:
     exit(1)
 
