@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 from datetime import date
 from os import environ as env
 from uuid import uuid4 as uuid
@@ -62,6 +60,3 @@ def main():
 
   if dumped_count != dump_count:
     exit(1)
-
-if __name__ == '__main__':
-  main()
