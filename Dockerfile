@@ -3,6 +3,9 @@ FROM registry.access.redhat.com/ubi8/python-39 as base
 # Add application sources to a directory that the assemble script expects them
 # and set permissions so that the container runs without root access
 USER 0
+
+RUN dnf -y remove httpd-tools httpd-filesystem
+
 ADD setup.py requirements.txt /tmp/src/
 ADD src /tmp/src/src
 
