@@ -1,0 +1,69 @@
+---
+apiVersion: v1
+kind: Template
+metadata:
+  name: floorist
+objects:
+- apiVersion: cloud.redhat.com/v1alpha1
+  kind: ClowdApp
+  metadata:
+    name: floorist
+  spec:
+    database:
+      sharedDbAppName: ${SHARED_DB_APP_NAME}
+    objectStore:
+      - ${BUCKET_NAME}
+    envName: ${ENV_NAME}
+    jobs:
+    - name: metrics-exporter
+      schedule: '*/5 * * * *'
+      podSpec:
+        image: ${IMAGE}:${IMAGE_TAG}
+        env:
+        # TODO: Grab these from object store and remove from template
+        - name: AWS_ACCESS_KEY_ID
+          value: "from a secret"
+        - name: AWS_SECRET_ACCESS_KEY
+          value: "from a secret"
+        - name: AWS_REGION
+          value: "from a secret"
+        - name: AWS_BUCKET
+          value: "from a secret"
+        - name: AWS_ENDPOINT
+          value: "from a secret"
+            
+        - name: FLOORPLAN_FILE
+          value: "from a secret"
+        resources:
+          limits:
+            cpu: "${CPU_LIMIT}"
+            memory: "${MEMORY_LIMIT}"
+          requests:
+            cpu: "${CPU_REQUEST}"
+            memory: "${MEMORY_REQUEST}"
+
+parameters:
+- description: Shared DB ClowdApp name
+  name: SHARED_DB_APP_NAME
+  required: true
+- description: Shared bucket name
+  name: BUCKET_NAME
+  required: true
+  value: floorist-bucket
+- description: Image tag
+  name: IMAGE_TAG
+  required: true
+  value: latest
+- description: Image name
+  name: IMAGE
+  value: quay.io/cloudservices/floorist
+- description: ClowdEnv Name
+  name: ENV_NAME
+- name: MEMORY_LIMIT
+  value: 200Mi
+- name: MEMORY_REQUEST
+  value: 100Mi
+- name: CPU_LIMIT
+  value: 100m
+- name: CPU_REQUEST
+  value: 50m
