@@ -1,5 +1,5 @@
 # Floorist
-[![Build Status](https://app.travis-ci.com/redhatinsights/floorist.svg?branch=master)](https://app.travis-ci.com/redhatinsights/floorist)
+[![Build Status](https://ci.ext.devshift.net/buildStatus/icon?job=RedHatInsights-floorist-pr-check "Build status")](https://ci.ext.devshift.net/job/RedHatInsights-floorist-pr-check/)
 
 Floorist is a simple script to dump SQL queries from a PostgreSQL database into S3 buckets in parquet format.
 
