@@ -6,7 +6,7 @@ USER 0
 
 RUN dnf -y remove httpd-tools httpd-filesystem
 
-ADD setup.py requirements.txt /tmp/src/
+ADD app.py setup.py requirements.txt /tmp/src/
 ADD src /tmp/src/src
 
 RUN /usr/bin/fix-permissions /tmp/src
