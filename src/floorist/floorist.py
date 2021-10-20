@@ -21,7 +21,6 @@ def main():
   )
   logging.debug('Successfully connected to the database')
 
-  error = False
   dump_count = 0
   dumped_count = 0
 
