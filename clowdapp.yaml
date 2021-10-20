@@ -11,30 +11,29 @@ objects:
   spec:
     database:
       sharedDbAppName: ${SHARED_DB_APP_NAME}
+    dependencies:
+      - ${SHARED_DB_APP_NAME}
     objectStore:
       - ${BUCKET_NAME}
     envName: ${ENV_NAME}
     jobs:
     - name: metrics-exporter
-      schedule: '*/5 * * * *'
+      schedule: ${SCHEDULE}
       podSpec:
         image: ${IMAGE}:${IMAGE_TAG}
         env:
-        # TODO: Grab these from object store and remove from template
-        - name: AWS_ACCESS_KEY_ID
-          value: "from a secret"
-        - name: AWS_SECRET_ACCESS_KEY
-          value: "from a secret"
-        - name: AWS_REGION
-          value: "from a secret"
         - name: AWS_BUCKET
-          value: "from a secret"
-        - name: AWS_ENDPOINT
-          value: "from a secret"
-            
+          value: ${BUCKET_NAME}
         - name: FLOORPLAN_FILE
-          value: "from a secret"
-        resources:
+          value: "/tmp/floorplan/floorplan.yaml"
+        volumeMounts:
+        - name: floorplan-volume
+          mountPath: "/tmp/floorplan"
+        volumes:
+          - name: floorplan-volume
+            configMap:
+              name: floorplan
+      resources:
           limits:
             cpu: "${CPU_LIMIT}"
             memory: "${MEMORY_LIMIT}"
@@ -67,3 +66,6 @@ parameters:
   value: 100m
 - name: CPU_REQUEST
   value: 50m
+- name: SCHEDULE
+  description: Cronjob schedule definition
+  value: '*/5 * * * *'
