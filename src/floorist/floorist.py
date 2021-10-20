@@ -1,34 +1,43 @@
 from datetime import date
-from os import environ as env
 from uuid import uuid4 as uuid
 from s3fs import S3FileSystem as s3
+from floorist.config import get_config
+from os import environ
 
 import logging
 import pandas.io.sql as sqlio
 import psycopg2
 import yaml
 
-def main():
 
-  LOGLEVEL = env.get('LOGLEVEL', 'INFO').upper()
+def _configure_loglevel():
+
+  LOGLEVEL = environ.get('LOGLEVEL', 'INFO').upper()
   logging.basicConfig(level=LOGLEVEL)
 
+
+def main():
+
+  _configure_loglevel()
+  config = get_config()
+
   # Fails if can't connect to S3 or the bucket does not exist
-  s3(client_kwargs={'endpoint_url': env.get('AWS_ENDPOINT') }).ls(env['AWS_BUCKET'])
+  s3(secret=config.bucket_secret_key, key=config.bucket_access_key,
+     client_kwargs={'endpoint_url': config.bucket_url }).ls(config.bucket_name)
   logging.debug('Successfully connected to the S3 bucket')
 
   conn = psycopg2.connect(
-    host=env['POSTGRES_SERVICE_HOST'],
-    user=env['POSTGRESQL_USER'],
-    password=env['POSTGRESQL_PASSWORD'],
-    database=env['POSTGRESQL_DATABASE']
+    host=config.database_hostname,
+    user=config.database_username,
+    password=config.database_password,
+    database=config.database_name
   )
   logging.debug('Successfully connected to the database')
 
   dump_count = 0
   dumped_count = 0
 
-  with open(env['FLOORPLAN_FILE'], 'r') as stream:
+  with open(config.floorplan_filename, 'r') as stream:
     # This try block allows us to proceed if a single SQL query fails
     for row in yaml.safe_load(stream):
       dump_count += 1
@@ -38,7 +47,7 @@ def main():
 
         data = sqlio.read_sql_query(row['query'], conn)
         target = '/'.join([
-          f"s3://{env['AWS_BUCKET']}",
+          f"s3://{config.bucket_name}",
           row['prefix'],
           date.today().strftime('year_created=%Y/month_created=%-m/day_created=%-d'),
           f"{uuid()}.parquet"
@@ -48,7 +57,11 @@ def main():
           path=target,
           compression='gzip',
           index=False,
-          storage_options={'client_kwargs':{'endpoint_url': env.get('AWS_ENDPOINT') }}
+          storage_options={
+            'secret': config.bucket_secret_key,
+             'key' : config.bucket_access_key,
+            'client_kwargs':{'endpoint_url': config.bucket_url }
+          }
         )
 
         logging.debug(f"Dumped #{dumped_count}: {row['query']} to {row['prefix']}")
