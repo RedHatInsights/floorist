@@ -9,6 +9,10 @@ import psycopg2
 import yaml
 
 def main():
+
+  LOGLEVEL = env.get('LOGLEVEL', 'INFO').upper()
+  logging.basicConfig(level=LOGLEVEL)
+
   # Fails if can't connect to S3 or the bucket does not exist
   s3(client_kwargs={'endpoint_url': env.get('AWS_ENDPOINT') }).ls(env['AWS_BUCKET'])
   logging.debug('Successfully connected to the S3 bucket')
