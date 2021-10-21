@@ -36,9 +36,8 @@ class TestFloorist:
 
     def test_unset_s3_bucket(self):
         del env['AWS_BUCKET']
-        with pytest.raises(KeyError) as ex:
+        with pytest.raises(ValueError, match=r".*Bucket name not configured.*"):
             main()
-        assert 'AWS_BUCKET' in str(ex.value)
 
     def test_missing_s3_bucket(self):
         env['AWS_BUCKET'] = 'foo'
@@ -50,9 +49,8 @@ class TestFloorist:
                              ['POSTGRES_SERVICE_HOST', 'POSTGRESQL_USER', 'POSTGRESQL_DATABASE', 'POSTGRESQL_PASSWORD'])
     def test_missing_pg_credentials(self, key):
         del env[key]
-        with pytest.raises(KeyError) as ex:
+        with pytest.raises(ValueError, match=".*not defined"):
             main()
-        assert key in str(ex.value)
 
     def test_invalid_pg_credentials(self):
         env['POSTGRESQL_USER'] = 'foo'
@@ -66,13 +64,13 @@ class TestFloorist:
         assert 'database "foo" does not exist' in str(ex.value)
 
     def test_unset_floorplan(self):
-        with pytest.raises(KeyError) as ex:
+        del env['FLOORPLAN_FILE']
+        with pytest.raises(ValueError, match="Floorplan filename not defined"):
             main()
-        assert 'FLOORPLAN_FILE' in str(ex.value)
 
     def test_missing_floorplan(self):
         env['FLOORPLAN_FILE'] = 'foo'
-        with pytest.raises(FileNotFoundError):
+        with pytest.raises(IOError):
             main()
 
     @pytest.mark.skip(reason="broken by issue #2")
