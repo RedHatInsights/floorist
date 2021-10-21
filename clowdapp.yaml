@@ -2,12 +2,12 @@
 apiVersion: v1
 kind: Template
 metadata:
-  name: floorist
+  name: ${SHARED_DB_APP_NAME}-floorist
 objects:
 - apiVersion: cloud.redhat.com/v1alpha1
   kind: ClowdApp
   metadata:
-    name: floorist
+    name: ${SHARED_DB_APP_NAME}-floorist
   spec:
     database:
       sharedDbAppName: ${SHARED_DB_APP_NAME}
@@ -18,7 +18,7 @@ objects:
     envName: ${ENV_NAME}
     jobs:
     - name: metrics-exporter
-      schedule: ${SCHEDULE}
+      schedule: ${FLOORIST_SCHEDULE}
       podSpec:
         image: ${IMAGE}:${IMAGE_TAG}
         env:
@@ -66,6 +66,6 @@ parameters:
   value: 100m
 - name: CPU_REQUEST
   value: 50m
-- name: SCHEDULE
+- name: FLOORIST_SCHEDULE
   description: Cronjob schedule definition
-  value: '*/5 * * * *'
+  required: true
