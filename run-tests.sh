@@ -77,7 +77,7 @@ try_to_create_container_network() {
   fi
 }
 
-#trap "teardown_docker" EXIT SIGINT SIGTERM
+trap "teardown_docker" EXIT SIGINT SIGTERM
 
 try_to_create_container_network || exit 1
 
