@@ -4,9 +4,9 @@ services:
     image: quay.io/cloudservices/centos-postgresql-12
     restart: always
     environment:
-      - POSTGRES_PASSWORD=floorist
-      - POSTGRES_USER=floorist
-      - POSTGRES_DB=floorist
+      - POSTGRESQL_PASSWORD=floorist
+      - POSTGRESQL_USER=floorist
+      - POSTGRESQL_DATABASE=floorist
     ports:
       - 5432:5432
   minio:
