@@ -33,35 +33,11 @@ def get_config():
 
 
 def _set_bucket_config(config):
-
-    if not isClowderEnabled() or force_environment_bucket_config():
-        _set_bucket_config_from_environment(config)
-    else:
-        _set_bucket_config_from_clowder(config)
-
-
-def force_environment_bucket_config():
-    return environ.get("FORCE_ENVIRONMENT_BUCKET_CONFIG") is not None
-
-
-def _set_bucket_config_from_environment(config):
     config.bucket_name = get_bucket_requested_name_from_environment()
     config.bucket_url = environ.get('AWS_ENDPOINT')
     config.bucket_secret_key = environ.get('AWS_SECRET_ACCESS_KEY')
     config.bucket_access_key = environ.get('AWS_ACCESS_KEY_ID')
     config.bucket_region = environ.get('AWS_REGION')
-
-
-def _set_bucket_config_from_clowder(config):
-
-    bucket_requested_name = get_bucket_requested_name_from_environment()
-    object_store_config = LoadedConfig.objectStore
-    bucket_config = ObjectBuckets[bucket_requested_name]
-    config.bucket_name = bucket_config.name
-    config.bucket_url = _get_bucket_url(object_store_config.hostname, object_store_config.port, object_store_config.tls)
-    config.bucket_access_key = bucket_config.accessKey
-    config.bucket_secret_key = bucket_config.secretKey
-    config.bucket_region = bucket_config.region
 
 
 def _get_bucket_url(hostname, port, https):
