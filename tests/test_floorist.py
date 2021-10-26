@@ -1,7 +1,7 @@
 import pytest
 import yaml
 
-from botocore.exceptions import NoCredentialsError
+from botocore.exceptions import NoCredentialsError, PartialCredentialsError
 from os import environ as env
 from psycopg2 import OperationalError
 from s3fs import S3FileSystem
@@ -29,10 +29,9 @@ class TestFloorist:
             main()
 
     def test_invalid_s3_credentials(self):
-        del env['AWS_ENDPOINT']
-        with pytest.raises(PermissionError) as ex:
+        del env['AWS_ACCESS_KEY_ID']
+        with pytest.raises(PartialCredentialsError) as ex:
             main()
-        assert 'AWS' in str(ex.value)
 
     def test_unset_s3_bucket(self):
         del env['AWS_BUCKET']

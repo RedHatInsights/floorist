@@ -2,6 +2,7 @@ from app_common_python import LoadedConfig, ObjectBuckets
 from app_common_python import isClowderEnabled
 from os import environ, access, R_OK
 from os.path import isfile
+from urllib.parse import urlparse
 
 
 import attr
@@ -34,17 +35,18 @@ def get_config():
 
 def _set_bucket_config(config):
     config.bucket_name = get_bucket_requested_name_from_environment()
-    config.bucket_url = environ.get('AWS_ENDPOINT')
+    config.bucket_url = _get_bucket_url(environ.get('AWS_ENDPOINT'))
     config.bucket_secret_key = environ.get('AWS_SECRET_ACCESS_KEY')
     config.bucket_access_key = environ.get('AWS_ACCESS_KEY_ID')
     config.bucket_region = environ.get('AWS_REGION')
 
 
-def _get_bucket_url(hostname, port, https):
-
-    protocol = "https" if https else "http"
-    return f"{protocol}://{hostname}:{port}"
-
+def _get_bucket_url(endpoint):
+    url = urlparse(endpoint)
+    if url.scheme in ['http', 'https'] or endpoint == None:
+        return endpoint
+    else:
+        return f"https://{endpoint}"
 
 def get_bucket_requested_name_from_environment():
 
@@ -101,3 +103,6 @@ def _validate_config(config):
 
     if not config.database_password:
         raise ValueError("Database password not defined")
+
+    if not config.bucket_url:
+        raise ValueError("Bucket endpoint not defined")
