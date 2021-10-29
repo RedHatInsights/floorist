@@ -1,3 +1,5 @@
+import logging
+
 from app_common_python import LoadedConfig, ObjectBuckets
 from app_common_python import isClowderEnabled
 from os import environ, access, R_OK
@@ -20,6 +22,8 @@ class Config:
     database_password=attr.ib(default=None)
     database_name=attr.ib(default=None)
     floorplan_filename=attr.ib(default=None)
+    loglevel=attr.ib(default="INFO")
+    cloudwatch_config=attr.ib(factory=dict)
 
 
 def get_config():
@@ -28,6 +32,7 @@ def get_config():
     _set_bucket_config(config)
     _set_database_config(config)
     _set_floorist_config(config)
+    _set_logging_config(config)
     _validate_config(config)
 
     return config
@@ -47,6 +52,7 @@ def _get_bucket_url(endpoint):
         return endpoint
     else:
         return f"https://{endpoint}"
+
 
 def get_bucket_requested_name_from_environment():
 
@@ -82,6 +88,28 @@ def _set_database_config_from_environment(config):
 
 def _set_floorist_config(config):
     config.floorplan_filename = environ.get('FLOORPLAN_FILE')
+
+
+def _set_logging_config(config):
+
+    config.loglevel = environ.get('LOGLEVEL', 'INFO').upper()
+
+    if isClowderEnabled():
+        _set_cloudwatch_config_from_clowder(config)
+    else:
+        _set_cloudwatch_config_from_environment(config)
+
+
+def _set_cloudwatch_config_from_clowder(config):
+
+    if LoadedConfig.logging:
+        config.cloudwatch_config = LoadedConfig.logging.cloudwatch
+    else:
+        logging.warning("No Cloudwatch logging config provided by Clowder!")
+
+
+def _set_cloudwatch_config_from_environment(config):
+    pass
 
 
 def _validate_config(config):
