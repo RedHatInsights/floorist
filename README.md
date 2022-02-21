@@ -49,6 +49,122 @@ The floorplan file simply defines a list of a prefix-query pair. The prefix shou
 
 The example above will create two dumps under the S3 bucket specified in the `AWS_BUCKET` environment variable into the `<prefix>/year_created=<Y>/month_created=<M>/day_created=<D>/<UUID>.parquet` file.
 
+### Clowder - How to add Floorist to your Clowder template
+
+You only need to add a new job definition on your ClowdApp, and a ConfigMap with the Floorplan definition your app needs.
+
+An example configuring the Floorist job follows, using a secret to host the S3 bucket config, the config map definition, and a floorplan Configmap example for reference.
+
+```yaml
+#Clowdapp.yaml
+
+- apiVersion: cloud.redhat.com/v1alpha1
+  kind: ClowdApp
+  metadata:
+    name: "${APP_NAME}"
+  spec:
+    jobs:
+    - name: floorist
+      schedule: ${FLOORIST_SCHEDULE}
+      suspend: ${FLOORIST_SUSPEND}
+      concurrencyPolicy: Forbid
+      podSpec:
+        image: ${FLOORIST_IMAGE}:${FLOORIST_IMAGE_TAG}
+        env:
+        - name: AWS_BUCKET
+          valueFrom:
+            secretKeyRef:
+              name: ${FLOORIST_BUCKET_SECRET_NAME}
+              key: bucket
+        - name: AWS_REGION
+          valueFrom:
+            secretKeyRef:
+              name: ${FLOORIST_BUCKET_SECRET_NAME}
+              key: aws_region
+        - name: AWS_ENDPOINT
+          valueFrom:
+            secretKeyRef:
+              name: ${FLOORIST_BUCKET_SECRET_NAME}
+              key: endpoint
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: ${FLOORIST_BUCKET_SECRET_NAME}
+              key: aws_access_key_id
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ${FLOORIST_BUCKET_SECRET_NAME}
+              key: aws_secret_access_key
+        - name: FLOORPLAN_FILE
+          value: "/tmp/floorplan/floorplan.yaml"
+        - name: LOGLEVEL
+          value: ${FLOORIST_LOGLEVEL}
+        volumeMounts:
+        - name: floorplan-volume
+          mountPath: "/tmp/floorplan"
+        volumes:
+          - name: floorplan-volume
+            configMap:
+              name: floorplan
+      resources:
+          limits:
+            cpu: "${CPU_LIMIT_FLOORIST}"
+            memory: "${MEMORY_LIMIT_FLOORIST}"
+          requests:
+            cpu: "${CPU_REQUEST_FLOORIST}"
+            memory: "${MEMORY_REQUEST_FLOORIST}"
+- apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: floorplan
+  data:
+    floorplan.yaml: |
+      - prefix: insights/yout-service-name/hosts-query
+        query: >-
+          SELECT
+            "inventory"."hosts"."id",
+              OR "inventory"."hosts"."id" IN (SELECT "test_results"."host_id" FROM "test_results"));
+      - prefix: insights/your-service-name/policies-query
+        query: >-
+          SELECT DISTINCT
+            "policies"."id",
+            "profiles"."ref_id",
+      - prefix: insights/your-service-name/policy_hosts-query
+        query: >-
+          SELECT "policy_hosts"."host_id", "policy_hosts"."policy_id" FROM "policy_hosts";
+
+parameters:
+- name: MEMORY_LIMIT_FLOORIST
+  value: 200Mi
+- name: MEMORY_REQUEST_FLOORIST
+  value: 100Mi
+- name: CPU_LIMIT_FLOORIST
+  value: 100m
+- name: CPU_REQUEST_FLOORIST
+  value: 50m
+- name: FLOORIST_SCHEDULE
+  description: Cronjob schedule definition
+  required: true
+  value: "0 2 * * *"
+- name: FLOORIST_SUSPEND
+  description: Disable Floorist cronjob execution
+  required: true
+  value: "true"
+- description: Floorist image name
+  name: FLOORIST_IMAGE
+  value: quay.io/cloudservices/floorist
+- description: Floorist Image tag
+  name: FLOORIST_IMAGE_TAG
+  required: true
+  value: latest
+- description: Shared bucket name
+  name: FLOORIST_BUCKET_NAME
+  required: true
+  value: floorist-bucket
+```
+
+
 ## Testing
 For testing the tool, you will need PostgreSQL and minio, there's a Docker Compose file provided in the `test` folder with everything prepared and configured. The configuration for these two services has to be stored in the `test/env.yaml` file, for the Docker Compose setup it's enough to copy the the `test/env.yaml.example` to make it work. However, if you would like to bring your own PostgreSQL server or maybe use a real S3 bucket, you have to edit these values accordingly. The tests can be started via `pytest`.
 
