@@ -166,16 +166,47 @@ parameters:
 
 
 ## Testing
+
 For testing the tool, you will need PostgreSQL and minio, there's a Docker Compose file provided in the `test` folder with everything prepared and configured. The configuration for these two services has to be stored in the `test/env.yaml` file, for the Docker Compose setup it's enough to copy the the `test/env.yaml.example` to make it work. However, if you would like to bring your own PostgreSQL server or maybe use a real S3 bucket, you have to edit these values accordingly. The tests can be started via `pytest`.
 
+There's two ways of running the tests, you can run them locally using `pytest` from your localhost or you can run everything from containers like we do on our CI process.
+
+**Required Python version <= 3.9** (see #18)
+
+### Running tests locally
+
 ```bash
-pip install -r app-src/requirements.txt
-pip install pytest
+
+# Install with Test dependencies
+pip install -e .[test] -r requirements.txt
+
+# Set the environment config file
 cp test/env.yaml.example test/env.yaml
+
+# Bring up all the required containers
 docker-compose -f test/docker-compose.yml up -d
+
+# Run the tests locally
 pytest
+
+# Tear-down
 docker-compose -f test/docker-compose.yml down
 ````
+
+### Running tests from containers
+
+Alternatively, you can also run the same process the CI system runs, locally, by running the `pr_check.sh` script with the `LOCAL_BUILD=true` environment variable set:
+
+```
+LOCAL_BUILD=true ./pr_check.sh
+```
+
+the **pr_check.sh** script will:
+
+- Build a new image for Floorist using the test dependencies (see [build_deploy.sh](build_deploy.sh) for details)
+- Run the tests in a container using the aforementioned image (see [run-tests.sh](run-tests.sh) for details)
+
+please **NOTE** - since the *pr_check.sh* script creates and deletes the containers it uses each time, it has to create a custom *env.yaml* file with the correct container names (i.e., to connect to the right database and the right container with the MinIO bucket), overriding the existing env file in the process (the local tests/env.yaml.example file has the default `localhost` value for when running `pytest`locally, so make sure this file has the correct values between each run if you run it both from the pr_check.sh script and the local `pytest` command)
 
 ## Contributing
 Bug reports and pull requests are welcome, here are some ideas for improvement:
