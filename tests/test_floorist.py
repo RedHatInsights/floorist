@@ -72,6 +72,11 @@ class TestFloorist:
         with pytest.raises(IOError):
             main()
 
+    def test_floorplan_undefined_aws_endpoint(self, caplog):
+        del env['AWS_ENDPOINT']
+        with pytest.raises(ValueError, match="endpoint not defined"):
+            main()
+
     @pytest.mark.skip(reason="broken by issue #2")
     def test_empty_floorplan(self):
         with pytest.raises(ParserError):
