@@ -14,8 +14,11 @@ setup(
     package_dir={'': 'src'},
     packages=find_packages(where='src'),
     python_requires='>=3.6, <4',
-    install_require=[
-        'app-common-python'
+    install_requires=[
+        'app-common-python',
+        'boto3',
+        'watchtower',
+        'PyYAML',
     ],
     extras_require={
         'test': ['pytest'],
