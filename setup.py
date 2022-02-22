@@ -17,7 +17,8 @@ setup(
     install_requires=[
         'app-common-python',
         'boto3',
-        'watchtower'
+        'watchtower',
+        'PyYAML',
     ],
     extras_require={
         'test': ['pytest'],
