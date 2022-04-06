@@ -134,6 +134,18 @@ class TestFloorist:
         assert 'Dumped 2 from total of 2'
         assert s3.ls(env['AWS_BUCKET']) == [f"{env['AWS_BUCKET']}/numbers", f"{env['AWS_BUCKET']}/people"]
 
+    def floorplan_with_large_result(self, caplog):
+        s3 = S3FileSystem(client_kwargs={'endpoint_url': env.get('AWS_ENDPOINT')})
+        if s3.ls(env['AWS_BUCKET']) != []:  # Make sure that the bucket is empty
+            s3.rm(f"{env['AWS_BUCKET']}/*", recursive=True)
+
+        assert s3.ls(env['AWS_BUCKET']) == []
+        env['FLOORPLAN_FILE'] = 'tests/floorplan_with_large_result.yaml'
+        main()
+        assert 'Dumped 1 from total of 1'
+        assert s3.ls(env['AWS_BUCKET']) == [f"{env['AWS_BUCKET']}/series"]
+        assert len(s3.les(f"{env['AWS_BUCKET']}/series/")), 2000
+
     def test_floorplan_with_one_failing_dump(self, caplog):
         s3 = S3FileSystem(client_kwargs={'endpoint_url': env.get('AWS_ENDPOINT')})
         if s3.ls(env['AWS_BUCKET']) != []:  # Make sure that the bucket is empty

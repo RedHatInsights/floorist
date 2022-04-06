@@ -1,0 +1,3 @@
+- query:  SELECT x, y, z FROM GENERATE_SERIES(0,999) as x JOIN GENERATE_SERIES(0,999) as y ON 1=1 JOIN GENERATE_SERIES(0,999) as z ON 1=1;
+  prefix: series
+  chunksize: 500

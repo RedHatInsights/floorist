@@ -36,7 +36,7 @@ docker run --rm floorist \
 
 ### Floorplan file
 
-The floorplan file simply defines a list of a prefix-query pair. The prefix should be a valid folder path that will be created under the bucket if it does not exist. For the queries it is recommended to assign simpler aliases for dynamically created (joins or aggregates) columns using `AS`.
+The floorplan file simply defines a list of a prefix-query pair. The prefix should be a valid folder path that will be created under the bucket if it does not exist. For the queries it is recommended to assign simpler aliases for dynamically created (joins or aggregates) columns using `AS`. Optionally you can set a custom `chunksize` for the [query](https://pandas.pydata.org/docs/reference/api/pandas.read_sql_query.html) (default is 1000) that will serve as the maximum number of records in a single parquet file.
 
 ```yaml
 - prefix: dumps/people
@@ -45,9 +45,10 @@ The floorplan file simply defines a list of a prefix-query pair. The prefix shou
 - prefix: dumps/cities
   query: >-
     SELECT name AS city_name, zip, country FROM cities;
+  chunksize: 100
 ```
 
-The example above will create two dumps under the S3 bucket specified in the `AWS_BUCKET` environment variable into the `<prefix>/year_created=<Y>/month_created=<M>/day_created=<D>/<UUID>.parquet` file.
+The example above will create two dumps under the S3 bucket specified in the `AWS_BUCKET` environment variable into the `<prefix>/year_created=<Y>/month_created=<M>/day_created=<D>/<UUID>.parquet` files.
 
 ### Clowder - How to add Floorist to your Clowder template
 
