@@ -168,11 +168,9 @@ parameters:
 
 ## Testing
 
-For testing the tool, you will need PostgreSQL and minio, there's a Docker Compose file provided in the `test` folder with everything prepared and configured. The configuration for these two services has to be stored in the `test/env.yaml` file, for the Docker Compose setup it's enough to copy the the `test/env.yaml.example` to make it work. However, if you would like to bring your own PostgreSQL server or maybe use a real S3 bucket, you have to edit these values accordingly. The tests can be started via `pytest`.
+For testing the tool, you will need PostgreSQL and minio, there's a Docker Compose file provided in the `test` folder with everything prepared and configured. The configuration for these two services has to be stored in the `tests/env.yaml` file, for the Docker Compose setup it's enough to copy the the `tests/env.yaml.example` to make it work. However, if you would like to bring your own PostgreSQL server or maybe use a real S3 bucket, you have to edit these values accordingly. The tests can be started via `pytest`.
 
 There's two ways of running the tests, you can run them locally using `pytest` from your localhost or you can run everything from containers like we do on our CI process.
-
-**Required Python version <= 3.9** (see #18)
 
 ### Running tests locally
 
@@ -182,16 +180,16 @@ There's two ways of running the tests, you can run them locally using `pytest` f
 pip install -e .[test] -r requirements.txt
 
 # Set the environment config file
-cp test/env.yaml.example test/env.yaml
+cp tests/env.yaml.example tests/env.yaml
 
 # Bring up all the required containers
-docker-compose -f test/docker-compose.yml up -d
+docker-compose -f tests/docker-compose.yml up -d
 
 # Run the tests locally
-pytest
+pytest tests
 
 # Tear-down
-docker-compose -f test/docker-compose.yml down
+docker-compose -f tests/docker-compose.yml down
 ````
 
 ### Running tests from containers
