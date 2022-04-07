@@ -45,24 +45,24 @@ def main():
       try:
         logging.debug(f"Dumping #{dump_count}: {row['query']} to {row['prefix']}")
 
-        data = sqlio.read_sql_query(row['query'], conn)
-        target = '/'.join([
-          f"s3://{config.bucket_name}",
-          row['prefix'],
-          date.today().strftime('year_created=%Y/month_created=%-m/day_created=%-d'),
-          f"{uuid()}.parquet"
-        ])
+        for data in sqlio.read_sql_query(row['query'], conn, chunksize=row.get('chunksize', 1000)):
+          target = '/'.join([
+            f"s3://{config.bucket_name}",
+            row['prefix'],
+            date.today().strftime('year_created=%Y/month_created=%-m/day_created=%-d'),
+            f"{uuid()}.parquet"
+          ])
 
-        data.to_parquet(
-          path=target,
-          compression='gzip',
-          index=False,
-          storage_options={
-            'secret': config.bucket_secret_key,
-             'key' : config.bucket_access_key,
-            'client_kwargs':{'endpoint_url': config.bucket_url }
-          }
-        )
+          data.to_parquet(
+            path=target,
+            compression='gzip',
+            index=False,
+            storage_options={
+              'secret': config.bucket_secret_key,
+               'key' : config.bucket_access_key,
+              'client_kwargs':{'endpoint_url': config.bucket_url }
+            }
+          )
 
         logging.debug(f"Dumped #{dumped_count}: {row['query']} to {row['prefix']}")
 
