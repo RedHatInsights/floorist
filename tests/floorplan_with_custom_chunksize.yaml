@@ -1,0 +1,3 @@
+- query:  SELECT GENERATE_SERIES(0,999);
+  prefix: series
+  chunksize: 13

@@ -1,78 +1,76 @@
 from datetime import date
-from uuid import uuid4 as uuid
-from s3fs import S3FileSystem as s3
 from floorist.config import get_config
 from os import environ
+from sqlalchemy import create_engine
+from uuid import uuid4 as uuid
 
+import awswrangler as wr
+import boto3
 import logging
-import pandas.io.sql as sqlio
-import psycopg2
+import pandas as pd
 import yaml
-
 
 def _configure_loglevel():
 
-  LOGLEVEL = environ.get('LOGLEVEL', 'INFO').upper()
-  logging.basicConfig(level=LOGLEVEL)
-
+    LOGLEVEL = environ.get('LOGLEVEL', 'INFO').upper()
+    logging.basicConfig(level=LOGLEVEL)
 
 def main():
 
-  _configure_loglevel()
-  config = get_config()
+    _configure_loglevel()
+    config = get_config()
 
-  # Fails if can't connect to S3 or the bucket does not exist
-  s3(secret=config.bucket_secret_key, key=config.bucket_access_key,
-     client_kwargs={'endpoint_url': config.bucket_url }).ls(config.bucket_name)
-  logging.debug('Successfully connected to the S3 bucket')
+    # Compatibility with minio, setting the endpoint URL explicitly if available
+    if config.bucket_url:
+      wr.config.s3_endpoint_url = config.bucket_url
 
-  conn = psycopg2.connect(
-    host=config.database_hostname,
-    user=config.database_username,
-    password=config.database_password,
-    database=config.database_name
-  )
-  logging.debug('Successfully connected to the database')
+    boto3.setup_default_session(aws_access_key_id=config.bucket_access_key, aws_secret_access_key=config.bucket_secret_key, region_name=config.bucket_region)
 
-  dump_count = 0
-  dumped_count = 0
+    # Fails if can't connect to S3 or the bucket does not exist
+    wr.s3.list_directories(f"s3://{config.bucket_name}")
+    logging.debug('Successfully connected to the S3 bucket')
 
-  with open(config.floorplan_filename, 'r') as stream:
-    # This try block allows us to proceed if a single SQL query fails
-    for row in yaml.safe_load(stream):
-      dump_count += 1
+    engine = create_engine(f"postgresql://{config.database_username}:{config.database_password}@{config.database_hostname}/{config.database_name}")
+    conn = engine.connect().execution_options(stream_results=True)
+    logging.debug('Successfully connected to the database')
 
-      try:
-        logging.debug(f"Dumping #{dump_count}: {row['query']} to {row['prefix']}")
+    dump_count = 0
+    dumped_count = 0
 
-        for data in sqlio.read_sql_query(row['query'], conn, chunksize=row.get('chunksize', 1000)):
-          target = '/'.join([
-            f"s3://{config.bucket_name}",
-            row['prefix'],
-            date.today().strftime('year_created=%Y/month_created=%-m/day_created=%-d'),
-            f"{uuid()}.parquet"
-          ])
+    with open(config.floorplan_filename, 'r') as stream:
+        # This try block allows us to proceed if a single SQL query fails
+        for row in yaml.safe_load(stream):
+            dump_count += 1
 
-          data.to_parquet(
-            path=target,
-            compression='gzip',
-            index=False,
-            storage_options={
-              'secret': config.bucket_secret_key,
-               'key' : config.bucket_access_key,
-              'client_kwargs':{'endpoint_url': config.bucket_url }
-            }
-          )
+            try:
+                logging.debug(f"Dumping #{dump_count}: {row['query']} to {row['prefix']}")
 
-        logging.debug(f"Dumped #{dumped_count}: {row['query']} to {row['prefix']}")
+                cursor = pd.read_sql(row['query'], conn, chunksize=row.get('chunksize', 1000))
 
-        dumped_count += 1
-      except Exception as ex:
-        logging.exception(ex)
+                target = '/'.join([
+                    f"s3://{config.bucket_name}",
+                    row['prefix'],
+                    date.today().strftime('year_created=%Y/month_created=%-m/day_created=%-d'),
+                    f"{uuid()}.parquet"
+                ])
 
-  logging.info(f'Dumped {dumped_count} from total of {dump_count}')
+                for data in cursor:
+                    wr.s3.to_parquet(data, target,
+                       index=False,
+                       compression='gzip',
+                       dataset=True,
+                       mode='append'
+                    )
 
-  conn.close()
+                logging.debug(f"Dumped #{dumped_count}: {row['query']} to {row['prefix']}")
 
-  if dumped_count != dump_count:
-    exit(1)
+                dumped_count += 1
+            except Exception as ex:
+                logging.exception(ex)
+
+    logging.info(f'Dumped {dumped_count} from total of {dump_count}')
+
+    conn.close()
+
+    if dumped_count != dump_count:
+        exit(1)
