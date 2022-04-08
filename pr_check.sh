@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 
-# Install bonfire repo/initialize - there are patches applied on bootstrap, required even if not using bonfire
-CICD_URL=https://raw.githubusercontent.com/RedHatInsights/bonfire/master/cicd
-curl -s $CICD_URL/bootstrap.sh > .cicd_bootstrap.sh && source .cicd_bootstrap.sh
+if [ "$LOCAL_BUILD" != true ]; then
+  # Install bonfire repo/initialize - there are patches applied on bootstrap, required even if not using bonfire
+  CICD_URL=https://raw.githubusercontent.com/RedHatInsights/bonfire/master/cicd
+  curl -s $CICD_URL/bootstrap.sh > .cicd_bootstrap.sh && source .cicd_bootstrap.sh
+fi
+
 APP_ROOT=${APP_ROOT:-`pwd`}
 # --------------------------------------------
 # Options that must be configured by app owner
