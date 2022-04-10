@@ -158,18 +158,18 @@ ARTIFACTS_DIR="$WORKSPACE/artifacts"
 mkdir -p "$ARTIFACTS_DIR"
 
 create_env_file || exit 1
-docker cp "$TESTS_ENV_FILE" "$TEST_CONTAINER_ID:/opt/app-root/src/tests/env.yaml"
+docker cp "$TESTS_ENV_FILE" "$TEST_CONTAINER_ID:/opt/app-root/tests/env.yaml"
 
 # tests
 echo '===================================='
 echo '===     Running Tests           ===='
 echo '===================================='
 set +e
-docker exec "$TEST_CONTAINER_ID" /bin/bash -c "pytest --junitxml=test-report.xml"
+docker exec "$TEST_CONTAINER_ID" /bin/bash -c "pytest --junitxml=test-report.xml tests"
 TEST_RESULT=$?
 set -e
 # Copy test reports
-docker cp "$TEST_CONTAINER_ID:/opt/app-root/src/test-report.xml" "$WORKSPACE/artifacts/junit-test-report.xml"
+docker cp "$TEST_CONTAINER_ID:/opt/app-root/test-report.xml" "$WORKSPACE/artifacts/junit-test-report.xml"
 
 if [[ $TEST_RESULT -ne 0 ]]; then
   echo '====================================='
