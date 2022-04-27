@@ -2,7 +2,6 @@ from datetime import date
 from floorist.config import get_config
 from os import environ
 from sqlalchemy import create_engine
-from uuid import uuid4 as uuid
 
 import awswrangler as wr
 import boto3
@@ -50,8 +49,7 @@ def main():
                 target = '/'.join([
                     f"s3://{config.bucket_name}",
                     row['prefix'],
-                    date.today().strftime('year_created=%Y/month_created=%-m/day_created=%-d'),
-                    f"{uuid()}.parquet"
+                    date.today().strftime('year_created=%Y/month_created=%-m/day_created=%-d')
                 ])
 
                 for data in cursor:
