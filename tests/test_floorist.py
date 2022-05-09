@@ -2,6 +2,7 @@ import awswrangler as wr
 import boto3
 import pytest
 import yaml
+import logging
 
 from botocore.exceptions import NoCredentialsError
 from floorist.floorist import main
@@ -17,6 +18,10 @@ class TestFloorist:
             settings = yaml.safe_load(stream)
             for key in settings:
                 env[key] = settings[key]
+
+    @pytest.fixture(autouse=True)
+    def setup_caplog(self, caplog):
+        caplog.set_level(logging.INFO)
 
     @pytest.fixture(autouse=False)
     def session(self):
@@ -145,14 +150,14 @@ class TestFloorist:
         prefix = f"s3://{env['AWS_BUCKET']}"
         env['FLOORPLAN_FILE'] = 'tests/floorplan_with_multiple_dumps.yaml'
         main()
-        assert 'Dumped 2 from total of 2'
+        assert 'Dumped 2 from total of 2' in caplog.text
         assert wr.s3.list_directories(prefix, boto3_session=session) == [f"{prefix}/numbers/", f"{prefix}/people/"]
 
     def test_floorplan_with_large_result(self, caplog, session):
         prefix = f"s3://{env['AWS_BUCKET']}"
         env['FLOORPLAN_FILE'] = 'tests/floorplan_with_large_result.yaml'
         main()
-        assert 'Dumped 1 from total of 1'
+        assert 'Dumped 1 from total of 1' in caplog.text
         assert wr.s3.list_directories(prefix, boto3_session=session) == [f"{prefix}/series/"]
         assert len(wr.s3.list_objects(f"{prefix}/series/", boto3_session=session)) == 1000
         df = wr.s3.read_parquet(f"{prefix}/series/", boto3_session=session)
@@ -162,7 +167,7 @@ class TestFloorist:
         prefix = f"s3://{env['AWS_BUCKET']}"
         env['FLOORPLAN_FILE'] = 'tests/floorplan_with_custom_chunksize.yaml'
         main()
-        assert 'Dumped 1 from total of 1'
+        assert 'Dumped 1 from total of 1' in caplog.text
         assert wr.s3.list_directories(prefix, boto3_session=session) == [f"{prefix}/series/"]
         assert len(wr.s3.list_objects(f"{prefix}/series/", boto3_session=session)) == 77
         df = wr.s3.read_parquet(f"{prefix}/series/", boto3_session=session)
@@ -175,14 +180,14 @@ class TestFloorist:
             main()
         assert ex.value.code == 1
         assert 'ProgrammingError' in caplog.text
-        assert 'Dumped 1 from total of 2'
+        assert 'Dumped 1 from total of 2' in caplog.text
         assert wr.s3.list_directories(prefix, boto3_session=session) == [f"{prefix}/numbers/"]
 
     def test_floorplan_valid(self, caplog, session):
         prefix = f"s3://{env['AWS_BUCKET']}"
         env['FLOORPLAN_FILE'] = 'tests/floorplan_valid.yaml'
         main()
-        assert 'Dumped 1 from total of 1'
+        assert 'Dumped 1 from total of 1' in caplog.text
         assert wr.s3.list_directories(prefix, boto3_session=session) == [f"{prefix}/valid/"]
         assert len(wr.s3.list_objects(f"{prefix}/valid/", boto3_session=session)) == 1
         df = wr.s3.read_parquet(f"{prefix}/valid/", boto3_session=session)
