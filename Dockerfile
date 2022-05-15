@@ -11,14 +11,12 @@ RUN microdnf install -y python39-devel postgresql-devel gcc && \
 
 WORKDIR /opt/app-root
 
-COPY app.py setup.py requirements.txt ./
+COPY app.py pyproject.toml setup.cfg requirements.txt ./
 COPY src ./src
 
-
-RUN virtualenv .                        && \
-    bin/pip install --upgrade pip       && \
-    bin/pip install -r requirements.txt && \
-    bin/python setup.py install         && \
+RUN virtualenv .                          && \
+    bin/pip install --upgrade pip         && \
+    bin/pip install -r requirements.txt . && \
     rm -rf \~
 
 FROM registry.access.redhat.com/ubi8/ubi-minimal as base
