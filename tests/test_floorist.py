@@ -1,3 +1,6 @@
+import os
+import re
+
 import awswrangler as wr
 import boto3
 import pytest
@@ -9,6 +12,8 @@ from floorist.floorist import main
 from os import environ as env
 from sqlalchemy.exc import OperationalError
 from tempfile import NamedTemporaryFile
+
+from floorist.helpers import generate_name
 
 
 class TestFloorist:
@@ -192,3 +197,13 @@ class TestFloorist:
         assert len(wr.s3.list_objects(f"{prefix}/valid/", boto3_session=session)) == 1
         df = wr.s3.read_parquet(f"{prefix}/valid/", boto3_session=session)
         assert len(df), 3
+
+    def test_target_files_have_expected_names(self, session):
+
+        bucket = f"s3://{env['AWS_BUCKET']}"
+        env['FLOORPLAN_FILE'] = "tests/floorplan_valid.yaml"
+        filename = generate_name(env['AWS_BUCKET'], "valid")
+        main()
+        existing_objects = wr.s3.list_objects(bucket, boto3_session=session)
+        assert len(existing_objects) == 1
+        assert re.match(rf"{filename}/[0-z]*\.gz.parquet", existing_objects[0])

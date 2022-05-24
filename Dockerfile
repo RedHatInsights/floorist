@@ -39,6 +39,6 @@ CMD python ./app.py
 
 FROM base as test
 
-ADD tests/test_* tests/floorplan_* tests/requirements.txt ./tests/
+ADD tests/test_* tests/unit/ tests/floorplan_* tests/requirements.txt ./tests/
 
-RUN pip install --no-cache-dir -r tests/requirements.txt
+RUN pip install --no-cache-dir .[test] -r tests/requirements.txt

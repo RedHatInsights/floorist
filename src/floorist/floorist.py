@@ -10,6 +10,9 @@ import logging
 import pandas as pd
 import yaml
 
+from floorist.helpers import generate_name, validate_floorplan_entry
+
+
 def _configure_loglevel():
 
     LOGLEVEL = environ.get('LOGLEVEL', 'INFO').upper()
@@ -43,15 +46,17 @@ def main():
             dump_count += 1
 
             try:
-                logging.debug(f"Dumping #{dump_count}: {row['query']} to {row['prefix']}")
 
-                cursor = pd.read_sql(row['query'], conn, chunksize=row.get('chunksize', 1000))
+                query = row['query']
+                prefix = row['prefix']
+                chunksize = row.get('chunksize', 1000)
 
-                target = '/'.join([
-                    f"s3://{config.bucket_name}",
-                    row['prefix'],
-                    date.today().strftime('year_created=%Y/month_created=%-m/day_created=%-d')
-                ])
+                logging.debug(f"Dumping #{dump_count}: {query} to {prefix}")
+
+                validate_floorplan_entry(query, prefix)
+
+                cursor = pd.read_sql(query, conn, chunksize=chunksize)
+                target = generate_name(config.bucket_name, prefix)
 
                 uuids = {}
 
@@ -72,7 +77,7 @@ def main():
                        mode='append'
                     )
 
-                logging.debug(f"Dumped #{dumped_count}: {row['query']} to {row['prefix']}")
+                logging.debug(f"Dumped #{dumped_count}: {query} to {prefix}")
 
                 dumped_count += 1
             except Exception as ex:
