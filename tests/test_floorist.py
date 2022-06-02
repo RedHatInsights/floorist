@@ -177,3 +177,13 @@ class TestFloorist:
         assert 'ProgrammingError' in caplog.text
         assert 'Dumped 1 from total of 2'
         assert wr.s3.list_directories(prefix, boto3_session=session) == [f"{prefix}/numbers/"]
+
+    def test_floorplan_valid(self, caplog, session):
+        prefix = f"s3://{env['AWS_BUCKET']}"
+        env['FLOORPLAN_FILE'] = 'tests/floorplan_valid.yaml'
+        main()
+        assert 'Dumped 1 from total of 1'
+        assert wr.s3.list_directories(prefix, boto3_session=session) == [f"{prefix}/valid/"]
+        assert len(wr.s3.list_objects(f"{prefix}/valid/", boto3_session=session)) == 1
+        df = wr.s3.read_parquet(f"{prefix}/valid/", boto3_session=session)
+        assert len(df), 3
