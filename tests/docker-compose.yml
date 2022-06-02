@@ -9,6 +9,11 @@ services:
       - POSTGRESQL_DATABASE=floorist
     ports:
       - 5432:5432
+    volumes:
+      - type: bind
+        source: ${PWD}/enable-extensions.sh
+        target: /opt/app-root/src/postgresql-init/enable-extensions.sh:z
+
   minio:
     image: quay.io/cloudservices/minio
     command: server /data

@@ -92,6 +92,7 @@ DB_CONTAINER_ID=$(docker run -d \
   -e POSTGRESQL_USER="$DATABASE_USER" \
   -e POSTGRESQL_PASSWORD="$DATABASE_PASSWORD" \
   -e POSTGRESQL_DATABASE="$DATABASE_NAME" \
+  -v "${PWD}/enable-extensions.sh:/opt/app-root/src/postgresql-init/enable-extensions.sh:z" \
   "$POSTGRES_IMAGE" || echo "0")
 
 if [[ "$DB_CONTAINER_ID" == "0" ]]; then
