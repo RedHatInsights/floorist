@@ -2,6 +2,7 @@ from datetime import date
 from floorist.config import get_config
 from os import environ
 from sqlalchemy import create_engine
+from uuid import UUID
 
 import awswrangler as wr
 import boto3
@@ -52,7 +53,18 @@ def main():
                     date.today().strftime('year_created=%Y/month_created=%-m/day_created=%-d')
                 ])
 
+                uuids = {}
+
                 for data in cursor:
+                    if len(uuids) == 0 and len(data) > 0:
+                        # Detect any columns with UUID
+                        for column in data:
+                            if isinstance(data[column][0], UUID):
+                                uuids[column] = "string"
+
+                    # Convert any columns with UUID type to string
+                    data = data.astype(uuids)
+
                     wr.s3.to_parquet(data, target,
                        index=False,
                        compression='gzip',

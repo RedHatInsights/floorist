@@ -166,6 +166,7 @@ echo '===================================='
 echo '===     Running Tests           ===='
 echo '===================================='
 set +e
+docker exec "$DB_CONTAINER_ID" /bin/bash -c "psql floorist -c 'CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";'"
 docker exec "$TEST_CONTAINER_ID" /bin/bash -c "pytest --junitxml=test-report.xml tests"
 TEST_RESULT=$?
 set -e
