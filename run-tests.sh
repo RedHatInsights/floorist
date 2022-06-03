@@ -92,7 +92,7 @@ DB_CONTAINER_ID=$(docker run -d \
   -e POSTGRESQL_USER="$DATABASE_USER" \
   -e POSTGRESQL_PASSWORD="$DATABASE_PASSWORD" \
   -e POSTGRESQL_DATABASE="$DATABASE_NAME" \
-  -v "${PWD}/enable-extensions.sh:/opt/app-root/src/postgresql-init/enable-extensions.sh:z" \
+  -v "${PWD}/enable-extensions.sh:/opt/app-root/src/postgresql-start/enable-extensions.sh:z" \
   "$POSTGRES_IMAGE" || echo "0")
 
 if [[ "$DB_CONTAINER_ID" == "0" ]]; then
@@ -166,7 +166,6 @@ echo '===================================='
 echo '===     Running Tests           ===='
 echo '===================================='
 set +e
-docker exec "$DB_CONTAINER_ID" /bin/bash -c "psql floorist -c 'CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";'"
 docker exec "$TEST_CONTAINER_ID" /bin/bash -c "pytest --junitxml=test-report.xml tests"
 TEST_RESULT=$?
 set -e

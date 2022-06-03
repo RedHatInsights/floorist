@@ -13,7 +13,7 @@ services:
     volumes:
       - type: bind
         source: ${PWD}/enable-extensions.sh
-        target: /opt/app-root/src/postgresql-init/enable-extensions.sh:z
+        target: /opt/app-root/src/postgresql-start/enable-extensions.sh:z
 
   minio:
     image: quay.io/cloudservices/minio
@@ -34,19 +34,4 @@ services:
       until /usr/bin/mc config host add myminio http://minio:9000 floorist floorist >/dev/null; do sleep 1; done ;
       /usr/bin/mc mb myminio/floorist;
       /usr/bin/mc policy set download myminio/floorist;
-      exit 0;'
-  setupdb:
-    image: registry.access.redhat.com/ubi9/ubi-minimal
-    depends_on:
-      - db
-    links:
-      - db
-    environment:
-      - PGHOST=db
-      - PGDATABASE=floorist
-      - PGUSER=postgres
-      - PGPASSWORD=flooristadmin
-    command: /bin/sh -c '
-      microdnf install -y postgresql;
-      psql -U postgres -c "CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\";";
       exit 0;'
