@@ -34,11 +34,31 @@ def get_config():
 
 
 def _set_bucket_config(config):
+    if isClowderEnabled():
+        _set_bucket_config_from_clowder(config)
+    else:
+        _set_bucket_config_from_environment(config)
+
+
+def _set_bucket_config_from_environment(config):
     config.bucket_name = get_bucket_requested_name_from_environment()
     config.bucket_url = _get_bucket_url(environ.get('AWS_ENDPOINT'))
     config.bucket_secret_key = environ.get('AWS_SECRET_ACCESS_KEY')
     config.bucket_access_key = environ.get('AWS_ACCESS_KEY_ID')
     config.bucket_region = environ.get('AWS_REGION')
+
+
+def _set_bucket_config_from_clowder(config):
+    bucket_name = get_bucket_requested_name_from_environment()
+    bucket_config = ObjectBuckets.get(bucket_name)
+    if not bucket_config:
+        raise ValueError(f'Requested bucket {bucket_name} not found in configuration.');
+
+    config.bucket_name = bucket_config.name
+    config.bucket_url = _get_bucket_url(LoadedConfig.objectStore.hostname)
+    config.bucket_secret_key = bucket_config.secretKey
+    config.bucket_access_key = bucket_config.accessKey
+    config.bucket_region = bucket_config.region
 
 
 def _get_bucket_url(endpoint):
