@@ -27,7 +27,7 @@ WORKDIR /opt/app-root
 
 COPY --chown=1001:0 --from=build /opt/app-root /opt/app-root
 
-RUN microdnf install -y python39 libpq && \
+RUN microdnf install -y python39 libpq procps-ng && \
     chown 1001:0 /opt/app-root
 
 USER 1001
