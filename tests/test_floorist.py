@@ -5,6 +5,7 @@ import yaml
 import logging
 
 from botocore.exceptions import NoCredentialsError
+from datetime import date
 from floorist.floorist import main
 from os import environ as env
 from sqlalchemy.exc import OperationalError
@@ -182,6 +183,16 @@ class TestFloorist:
         assert 'ProgrammingError' in caplog.text
         assert 'Dumped 1 from total of 2' in caplog.text
         assert wr.s3.list_directories(prefix, boto3_session=session) == [f"{prefix}/numbers/"]
+
+    def test_floorplan_with_empty_dataset(self, caplog, session):
+        prefix = f"s3://{env['AWS_BUCKET']}"
+        datepath = f"{date.today().strftime('year_created=%Y/month_created=%-m/day_created=%-d')}"
+        env['FLOORPLAN_FILE'] = 'tests/floorplan_with_empty_dataset.yaml'
+        main()
+        assert 'Dumped 1 from total of 1' in caplog.text
+        assert wr.s3.list_directories(f"{prefix}/empty/{datepath}", boto3_session=session) == [f"{prefix}/empty/{datepath}/"]
+        # Deep directories need a different cleanup approach
+        wr._utils.resource('s3').Bucket(env['AWS_BUCKET']).objects.all().delete()
 
     def test_floorplan_valid(self, caplog, session):
         prefix = f"s3://{env['AWS_BUCKET']}"

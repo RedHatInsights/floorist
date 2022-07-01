@@ -1,0 +1,2 @@
+- query:  SELECT WHERE 1=0;
+  prefix: empty
