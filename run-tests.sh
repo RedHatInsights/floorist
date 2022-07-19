@@ -108,7 +108,7 @@ MINIO_CONTAINER_ID=$(docker run -d \
   -e MINIO_SECRET_KEY="$MINIO_SECRET_KEY" \
   "$MINIO_IMAGE" server /data || echo "0")
 
-if [[ "$MINIO_CONTAINER_NAME" == "0" ]]; then
+if [[ "$MINIO_CONTAINER_ID" == "0" ]]; then
   echo "Failed to start Minio container"
   exit 1
 fi
@@ -127,7 +127,7 @@ MINIO_CLIENT_CONTAINER_ID=$(docker run -d \
   --entrypoint '/bin/sh' \
   "$MINIO_CLIENT_IMAGE" -c "$MINIO_CLIENT_COMMAND" || echo "0")
 
-if [[ "$MINIO_CLIENT_CONTAINER_NAME" == "0" ]]; then
+if [[ "$MINIO_CLIENT_CONTAINER_ID" == "0" ]]; then
   echo "Failed to start Minio client container"
   exit 1
 fi
