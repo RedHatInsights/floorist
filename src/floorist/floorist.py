@@ -28,11 +28,11 @@ def main():
 
     # Fails if can't connect to S3 or the bucket does not exist
     wr.s3.list_directories(f"s3://{config.bucket_name}")
-    logging.debug('Successfully connected to the S3 bucket')
+    logging.info('Successfully connected to the S3 bucket')
 
     engine = create_engine(f"postgresql://{config.database_username}:{config.database_password}@{config.database_hostname}/{config.database_name}")
     conn = engine.connect().execution_options(stream_results=True)
-    logging.debug('Successfully connected to the database')
+    logging.info('Successfully connected to the database')
 
     dump_count = 0
     dumped_count = 0
@@ -44,7 +44,8 @@ def main():
             chunksize = row.get('chunksize', 1000)
 
             try:
-                logging.debug(f"Dumping #{dump_count}: {row['query']} to {row['prefix']}")
+                logging.info('[Dump #%d] Dumping to %s with chuksize %s', dump_count, row['prefix'], chunksize)
+                logging.debug('[Dump #%d] Query: %s', dump_count, row['query'])
 
                 cursor = pd.read_sql(row['query'], conn, chunksize=chunksize)
 
@@ -53,11 +54,13 @@ def main():
 
                 uuids = {}
 
+                chunk = 1
                 for data in cursor:
                     if len(uuids) == 0 and len(data) > 0:
                         # Detect any columns with UUID
                         for column in data:
                             if isinstance(data[column][0], UUID):
+                                logging.debug('[Dump #%d] UUID column detected: %s', dump_count, column)
                                 uuids[column] = "string"
 
                     # Convert any columns with UUID type to string
@@ -70,18 +73,21 @@ def main():
                            dataset=True,
                            mode='append'
                         )
+                        logging.info('[Dump #%d] Written parquet chunk #%d', dump_count, chunk)
+                        chunk += 1
                     else:
                         # Create an empty folder if the returned dataset is empty
                         wr._utils.client('s3').put_object(Bucket=config.bucket_name, Body='', Key=path+'/')
+                        logging.info('[Dump #%d] Empty folder created for empty result', dump_count)
 
 
-                logging.debug(f"Dumped #{dumped_count}: {row['query']} to {row['prefix']}")
+                logging.debug('[Dump #%d] Dumped %s to %s', dump_count, row['query'], row['prefix'])
 
                 dumped_count += 1
             except Exception as ex:
-                logging.exception(ex)
+                logging.exception('[Dump #%d] %s', dump_count, ex)
 
-    logging.info(f'Dumped {dumped_count} from total of {dump_count}')
+    logging.info('Dumped %d from total of %d', dumped_count, dump_count)
 
     conn.close()
 
