@@ -41,11 +41,12 @@ def main():
         # This try block allows us to proceed if a single SQL query fails
         for row in yaml.safe_load(stream):
             dump_count += 1
+            chunksize = row.get('chunksize', 1000)
 
             try:
                 logging.debug(f"Dumping #{dump_count}: {row['query']} to {row['prefix']}")
 
-                cursor = pd.read_sql(row['query'], conn, chunksize=row.get('chunksize', 1000))
+                cursor = pd.read_sql(row['query'], conn, chunksize=chunksize)
 
                 path = f"{row['prefix']}/{date.today().strftime('year_created=%Y/month_created=%-m/day_created=%-d')}"
                 target = f"s3://{config.bucket_name}/{path}"
