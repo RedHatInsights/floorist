@@ -1,10 +1,15 @@
+ARG deps="python3 libpq procps-ng"
+ARG devDeps="python3-devel postgresql-devel gcc"
+
 FROM registry.access.redhat.com/ubi9/ubi-minimal AS build
 
 # Add application sources to a directory that the assemble script expects them
 # and set permissions so that the container runs without root access
 USER 0
 
-RUN microdnf install -y python3-devel postgresql-devel gcc && \
+ARG devDeps
+
+RUN microdnf install -y $devDeps                            && \
     pip3 install virtualenv                                 && \
     mkdir -p /opt/app-root                                  && \
     chown 1001:0 /opt/app-root
@@ -23,11 +28,13 @@ FROM registry.access.redhat.com/ubi9/ubi-minimal AS base
 
 USER 0
 
+ARG deps
+
 WORKDIR /opt/app-root
 
 COPY --chown=1001:0 --from=build /opt/app-root /opt/app-root
 
-RUN microdnf install -y python3 libpq procps-ng && \
+RUN microdnf install -y $deps && \
     chown 1001:0 /opt/app-root
 
 USER 1001
