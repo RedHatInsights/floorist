@@ -2,7 +2,7 @@
 
 BUILD_DEPLOY_WORKDIR=$(pwd)
 BACKWARDS_COMPATIBILITY="${BACKWARDS_COMPATIBILITY:-true}"
-BACKWARDS_COMPATIBILITY_TAGS="latest qa"
+BACKWARDS_COMPATIBILITY_TAGS="qa"
 REQUIRED_REGISTRIES="quay redhat"
 REQUIRED_REGISTRIES_LOCAL="redhat"
 LOCAL_BUILD="${LOCAL_BUILD:-false}"
@@ -241,6 +241,8 @@ build_deploy_main() {
 
     if ! local_build; then
         push_image "$IMAGE_TAG"
+        tag_image "latest"
+        push_image "latest"
     fi
 
     # To enable backwards compatibility with ci, qa, and smoke, always push latest and qa tags
