@@ -19,7 +19,7 @@ RUN virtualenv .                          && \
     bin/pip install -r requirements.txt . && \
     rm -rf \~
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal as base
+FROM registry.access.redhat.com/ubi9/ubi-minimal AS base
 
 USER 0
 
@@ -37,7 +37,7 @@ ENV PATH="/opt/app-root/bin:$PATH"
 # Set the default command for the resulting image
 CMD python ./app.py
 
-FROM base as test
+FROM base AS test
 
 ADD tests/test_* tests/floorplan_* tests/requirements.txt ./tests/
 
