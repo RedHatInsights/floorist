@@ -29,6 +29,7 @@ FROM registry.access.redhat.com/ubi9/ubi-minimal AS base
 USER 0
 
 ARG deps
+ENV deps=${deps}
 
 WORKDIR /opt/app-root
 
