@@ -17,7 +17,7 @@ jobs:
           base=$(grep -Po '(?<=FROM )([^\s]*)(?= AS base)' Dockerfile)
           skopeo inspect "docker://$base" | grep -Po '(?<="Digest": ")([^"]+)' > .baseimagedigest
           docker run --rm quay.io/cloudservices/floorist:latest sh -c \
-            'microdnf update $deps > /dev/null; rpm -q $deps | sort | sha256sum | cut -d " " -f 1' \
+            'microdnf update $(cat /opt/installedpackages) > /dev/null; rpm -q $(cat /opt/installedpackages) | sort | sha256sum | cut -d " " -f 1' \
             >> .baseimagedigest
       - name: Do change if the digest changed
         run: |
