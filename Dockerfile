@@ -1,4 +1,4 @@
-ARG deps="python3 libpq procps-ng"
+ARG deps="python3 libpq procps-ng diffutils"
 ARG devDeps="python3-devel postgresql-devel gcc"
 
 FROM registry.access.redhat.com/ubi9/ubi-minimal AS build
@@ -35,7 +35,10 @@ WORKDIR /opt/app-root
 
 COPY --chown=1001:0 --from=build /opt/app-root /opt/app-root
 
-RUN microdnf install -y $deps && \
+RUN rpm -qa --qf '%{NAME}\n' | sort > /opt/basepackages && \
+    microdnf install -y $deps && \
+    rpm -qa --qf '%{NAME}\n' | sort | diff /opt/basepackages - | grep -Po '(?<=> )(.*)' > /opt/installedpackages && \
+    rm /opt/basepackages && \
     chown 1001:0 /opt/app-root
 
 USER 1001
