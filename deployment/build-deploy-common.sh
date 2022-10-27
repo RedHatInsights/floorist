@@ -13,6 +13,7 @@ QUAY_REGISTRY="${QUAY_REGISTRY:-quay.io}"
 BUILD_DEPLOY_TEMP_IMAGE="${BUILD_DEPLOY_TEMP_IMAGE:-false}"
 CONTAINER_ENGINE_CMD=''
 BUILD_ARGS=''
+BUILD_PARAMS=''
 
 local_build() {
   [ "$LOCAL_BUILD" = true ]
@@ -179,9 +180,9 @@ build_image() {
 
     if [ -n "$BUILD_ARGS" ]; then
         BUILD_ARGS_CMD=$(_get_build_args)
-        container_engine_cmd build --pull -f "$DOCKERFILE" $BUILD_ARGS_CMD -t "${IMAGE_NAME}:${IMAGE_TAG}" $BUILD_TARGET $IMAGE_LABELS .
+        container_engine_cmd build --pull $BUILD_PARAMS -f "$DOCKERFILE" $BUILD_ARGS_CMD -t "${IMAGE_NAME}:${IMAGE_TAG}" $BUILD_TARGET $IMAGE_LABELS .
     else
-        container_engine_cmd build --pull -f "$DOCKERFILE" -t "${IMAGE_NAME}:${IMAGE_TAG}" $BUILD_TARGET $IMAGE_LABELS .
+        container_engine_cmd build --pull $BUILD_PARAMS -f "$DOCKERFILE" -t "${IMAGE_NAME}:${IMAGE_TAG}" $BUILD_TARGET $IMAGE_LABELS .
     fi
 
 }
