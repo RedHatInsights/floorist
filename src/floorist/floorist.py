@@ -43,11 +43,18 @@ def main():
             dump_count += 1
             chunksize = row.get('chunksize', 1000)
 
+            if chunksize == 0:
+                chunksize = None
+
             try:
                 logging.info('[Dump #%d] Dumping to %s with chuksize %s', dump_count, row['prefix'], chunksize)
                 logging.debug('[Dump #%d] Query: %s', dump_count, row['query'])
 
                 cursor = pd.read_sql(row['query'], conn, chunksize=chunksize)
+
+                # This should allow the parsing of non-streamed results with the same iterative approach below
+                if isinstance(cursor, pd.DataFrame):
+                    cursor = [cursor]
 
                 path = f"{row['prefix']}/{date.today().strftime('year_created=%Y/month_created=%-m/day_created=%-d')}"
                 target = f"s3://{config.bucket_name}/{path}"

@@ -36,7 +36,7 @@ docker run --rm floorist \
 
 ### Floorplan file
 
-The floorplan file simply defines a list of a prefix-query pair. The prefix should be a valid folder path that will be created under the bucket if it does not exist. For the queries it is recommended to assign simpler aliases for dynamically created (joins or aggregates) columns using `AS`. Optionally you can set a custom `chunksize` for the [query](https://pandas.pydata.org/docs/reference/api/pandas.read_sql_query.html) (default is 1000) that will serve as the maximum number of records in a single parquet file.
+The floorplan file simply defines a list of a prefix-query pair. The prefix should be a valid folder path that will be created under the bucket if it does not exist. For the queries it is recommended to assign simpler aliases for dynamically created (joins or aggregates) columns using `AS`. Optionally you can set a custom `chunksize` for the [query](https://pandas.pydata.org/docs/reference/api/pandas.read_sql_query.html) (default is 1000) that will serve as the maximum number of records in a single parquet file. If the `chunksize` is set to `0`, all records will be dumped into a single parquet file. Note that this can consume a lot of memory in case of a large SQL result.
 
 ```yaml
 - prefix: dumps/people

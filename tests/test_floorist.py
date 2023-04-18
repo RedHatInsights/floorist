@@ -174,6 +174,16 @@ class TestFloorist:
         df = wr.s3.read_parquet(f"{prefix}/series/", boto3_session=session)
         assert len(df), 1000
 
+    def test_floorplan_with_zero_chunksize(self, caplog, session):
+        prefix = f"s3://{env['AWS_BUCKET']}"
+        env['FLOORPLAN_FILE'] = 'tests/floorplan_with_zero_chunksize.yaml'
+        main()
+        assert 'Dumped 1 from total of 1' in caplog.text
+        assert wr.s3.list_directories(prefix, boto3_session=session) == [f"{prefix}/series/"]
+        assert len(wr.s3.list_objects(f"{prefix}/series/", boto3_session=session)) == 1
+        df = wr.s3.read_parquet(f"{prefix}/series/", boto3_session=session)
+        assert len(df), 1000
+
     def test_floorplan_with_one_failing_dump(self, caplog, session):
         prefix = f"s3://{env['AWS_BUCKET']}"
         env['FLOORPLAN_FILE'] = 'tests/floorplan_with_one_failing_dump.yaml'
