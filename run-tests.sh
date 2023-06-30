@@ -10,7 +10,7 @@ NETWORK="floorist-test-${IMAGE_TAG}"
 
 POSTGRES_IMAGE="quay.io/cloudservices/centos-postgresql-12"
 MINIO_IMAGE="quay.io/cloudservices/minio"
-MINIO_CLIENT_IMAGE="quay.io/cloudservices/minio-mc"
+MINIO_CLIENT_IMAGE="quay.io/cloudservices/mc"
 MINIO_BUCKET_NAME="floorist"
 MINIO_REGION="us-east-1"
 
