@@ -2,11 +2,12 @@
 
 set -exv
 
-source 'deployment/build-deploy-common.sh'
+export CICD_BOOTSTRAP_REPO_BRANCH='main'
+export CICD_BOOTSTRAP_REPO_ORG='RedHatInsights'
+CICD_TOOLS_URL="https://raw.githubusercontent.com/${CICD_BOOTSTRAP_REPO_ORG}/cicd-tools/${CICD_BOOTSTRAP_REPO_BRANCH}/src/bootstrap.sh"
+# shellcheck source=/dev/null
+source <(curl -sSL "$CICD_TOOLS_URL") image_builder
 
-IMAGE_NAME="${IMAGE_NAME:-quay.io/cloudservices/floorist}"
-BUILD_DEPLOY_BUILD_TARGET="${BUILD_DEPLOY_BUILD_TARGET:-base}"
-BACKWARDS_COMPATIBILITY=false
-BUILD_PARAMS="--no-cache"
+export CICD_IMAGE_BUILDER_IMAGE_NAME='quay.io/cloudservices/floorist'
 
-build_deploy_main || exit 1
+cicd::image_builder::build_and_push --no-cache --target base
