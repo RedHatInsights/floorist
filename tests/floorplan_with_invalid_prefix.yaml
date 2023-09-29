@@ -1,2 +1,0 @@
-- query: SELECT * FROM (VALUES (1, 'one'), (2, 'two'), (3, 'three')) AS t (num,letter);
-  prefix: '|/'

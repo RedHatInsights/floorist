@@ -1,2 +1,0 @@
-- query: SELECT * FROM (VALUES (uuid_generate_v1(), 'one'), (uuid_generate_v1(), 'two'), (uuid_generate_v1(), 'three')) AS t (num,letter);
-  prefix: valid
