@@ -1,12 +1,6 @@
 #!/usr/bin/env bash
 
-if [ "$LOCAL_BUILD" != true ]; then
-  # Install bonfire repo/initialize - there are patches applied on bootstrap, required even if not using bonfire
-  CICD_URL=https://raw.githubusercontent.com/RedHatInsights/bonfire/master/cicd
-  curl -s $CICD_URL/bootstrap.sh > .cicd_bootstrap.sh && source .cicd_bootstrap.sh
-fi
-
-APP_ROOT=${APP_ROOT:-`pwd`}
+APP_ROOT=${APP_ROOT:-$(pwd)}
 # --------------------------------------------
 # Options that must be configured by app owner
 # --------------------------------------------
@@ -16,8 +10,7 @@ COMPONENT_NAME="floorist"  # name of app-sre "resourceTemplate" in deploy.yaml f
 
 cat /etc/redhat-release
 
-BUILD_DEPLOY_BUILD_TARGET="test"
-BUILD_DEPLOY_TEMP_IMAGE=true
+export BUILD_TARGET="test"
 
 source "$APP_ROOT/build_deploy.sh" || exit 1
 

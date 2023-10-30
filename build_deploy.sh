@@ -9,5 +9,6 @@ CICD_TOOLS_URL="https://raw.githubusercontent.com/${CICD_BOOTSTRAP_REPO_ORG}/cic
 source <(curl -sSL "$CICD_TOOLS_URL") image_builder
 
 export CICD_IMAGE_BUILDER_IMAGE_NAME='quay.io/cloudservices/floorist'
+BUILD_TARGET=${BUILD_TARGET:-base}
 
-cicd::image_builder::build_and_push --no-cache --target base
+cicd::image_builder::build_and_push --no-cache --target "${BUILD_TARGET}"
