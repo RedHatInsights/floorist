@@ -8,15 +8,15 @@ CICD_TOOLS_URL="https://raw.githubusercontent.com/${CICD_BOOTSTRAP_REPO_ORG}/cic
 source <(curl -sSL "$CICD_TOOLS_URL") image_builder
 
 export CICD_IMAGE_BUILDER_IMAGE_NAME='quay.io/cloudservices/floorist'
-IMAGE_TAG=$(cicd::image_builder::get_image_tag)
+TAG=$(cicd::image_builder::get_image_tag)
 
 cd "$APP_ROOT"
 
-DB_CONTAINER_NAME="floorist-db-${IMAGE_TAG}"
-MINIO_CONTAINER_NAME="floorist-minio-${IMAGE_TAG}"
-MINIO_CLIENT_CONTAINER_NAME="floorist-minio-client-${IMAGE_TAG}"
-TEST_CONTAINER_NAME="floorist-test-${IMAGE_TAG}"
-NETWORK="floorist-test-${IMAGE_TAG}"
+DB_CONTAINER_NAME="floorist-db-${TAG}"
+MINIO_CONTAINER_NAME="floorist-minio-${TAG}"
+MINIO_CLIENT_CONTAINER_NAME="floorist-minio-client-${TAG}"
+TEST_CONTAINER_NAME="floorist-test-${TAG}"
+NETWORK="floorist-test-${TAG}"
 
 POSTGRES_IMAGE="quay.io/cloudservices/centos-postgresql-12"
 MINIO_IMAGE="quay.io/cloudservices/minio"
