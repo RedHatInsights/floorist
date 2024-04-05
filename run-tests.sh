@@ -1,12 +1,22 @@
 #!/bin/bash
 
+export CICD_BOOTSTRAP_REPO_BRANCH='main'
+export CICD_BOOTSTRAP_REPO_ORG='RedHatInsights'
+APP_ROOT=${APP_ROOT:-$(pwd)}
+CICD_TOOLS_URL="https://raw.githubusercontent.com/${CICD_BOOTSTRAP_REPO_ORG}/cicd-tools/${CICD_BOOTSTRAP_REPO_BRANCH}/src/bootstrap.sh"
+# shellcheck source=/dev/null
+source <(curl -sSL "$CICD_TOOLS_URL") image_builder
+
+export CICD_IMAGE_BUILDER_IMAGE_NAME='quay.io/cloudservices/floorist'
+TAG=$(cicd::image_builder::get_image_tag)
+
 cd "$APP_ROOT"
 
-DB_CONTAINER_NAME="floorist-db-${IMAGE_TAG}"
-MINIO_CONTAINER_NAME="floorist-minio-${IMAGE_TAG}"
-MINIO_CLIENT_CONTAINER_NAME="floorist-minio-client-${IMAGE_TAG}"
-TEST_CONTAINER_NAME="floorist-test-${IMAGE_TAG}"
-NETWORK="floorist-test-${IMAGE_TAG}"
+DB_CONTAINER_NAME="floorist-db-${TAG}"
+MINIO_CONTAINER_NAME="floorist-minio-${TAG}"
+MINIO_CLIENT_CONTAINER_NAME="floorist-minio-client-${TAG}"
+TEST_CONTAINER_NAME="floorist-test-${TAG}"
+NETWORK="floorist-test-${TAG}"
 
 POSTGRES_IMAGE="quay.io/cloudservices/centos-postgresql-12"
 MINIO_IMAGE="quay.io/cloudservices/minio"
@@ -21,7 +31,7 @@ DATABASE_NAME="floorist"
 MINIO_ACCESS_KEY="floorist"
 MINIO_SECRET_KEY="floorist"
 
-TESTS_ENV_FILE="$APP_ROOT/tests/env.yaml"
+TESTS_ENV_FILE="${APP_ROOT}/tests/env.yaml"
 
 FLOORPLAN_FILE="tests/floorplan_valid.yaml"
 
@@ -43,23 +53,23 @@ EOF
 }
 
 function teardown_docker {
-  docker rm -f "$DB_CONTAINER_NAME" || true
-  docker rm -f "$MINIO_CONTAINER_NAME" || true
-  docker rm -f "$MINIO_CLIENT_CONTAINER_NAME" || true
-  docker rm -f "$TEST_CONTAINER_NAME" || true
+  cicd::container::cmd rm -f "$DB_CONTAINER_NAME" || true
+  cicd::container::cmd rm -f "$MINIO_CONTAINER_NAME" || true
+  cicd::container::cmd rm -f "$MINIO_CLIENT_CONTAINER_NAME" || true
+  cicd::container::cmd rm -f "$TEST_CONTAINER_NAME" || true
   try_to_delete_network || true
 }
 
 try_to_delete_network() {
 
-  if ! docker network rm "$NETWORK"; then
+  if ! cicd::container::cmd network rm "$NETWORK"; then
 
     for CONTAINER_ID in "$DB_CONTAINER_NAME" "$MINIO_CONTAINER_NAME" "$MINIO_CONTAINER_NAME" "$TEST_CONTAINER_NAME"; do
-      docker rm -f "$CONTAINER_ID"
-      docker network disconnect -f "$NETWORK" "$CONTAINER_ID"
+      cicd::container::cmd rm -f "$CONTAINER_ID"
+      cicd::container::cmd network disconnect -f "$NETWORK" "$CONTAINER_ID"
     done
 
-    if ! docker network rm "$NETWORK"; then
+    if ! cicd::container::cmd network rm "$NETWORK"; then
       echo "failed deleting network '$NETWORK'";
       return 1
     fi
@@ -68,14 +78,14 @@ try_to_delete_network() {
 
 try_to_create_container_network() {
 
-  if docker network inspect "$NETWORK" >/dev/null; then
+  if cicd::container::cmd network inspect "$NETWORK" >/dev/null; then
 
     if ! try_to_delete_network "$NETWORK"; then
         return 1
     fi
   fi
 
-  if ! docker network create --driver bridge "$NETWORK"; then
+  if ! cicd::container::cmd network create --driver bridge "$NETWORK"; then
     echo "failed to create network $NETWORK"
     return 1
   fi
@@ -85,7 +95,7 @@ trap "teardown_docker" EXIT SIGINT SIGTERM
 
 try_to_create_container_network || exit 1
 
-DB_CONTAINER_ID=$(docker run -d \
+DB_CONTAINER_ID=$(cicd::container::cmd run -d \
   --name "${DB_CONTAINER_NAME}" \
   --network "$NETWORK" \
   --rm \
@@ -100,7 +110,7 @@ if [[ "$DB_CONTAINER_ID" == "0" ]]; then
   exit 1
 fi
 
-MINIO_CONTAINER_ID=$(docker run -d \
+MINIO_CONTAINER_ID=$(cicd::container::cmd run -d \
   --name "${MINIO_CONTAINER_NAME}" \
   --network "$NETWORK" \
   --rm \
@@ -120,7 +130,7 @@ MINIO_CLIENT_COMMAND="""
       exit 0;
 """
 
-MINIO_CLIENT_CONTAINER_ID=$(docker run -d \
+MINIO_CLIENT_CONTAINER_ID=$(cicd::container::cmd run -d \
   --name "${MINIO_CLIENT_CONTAINER_NAME}" \
   --network "$NETWORK" \
   --rm \
@@ -133,7 +143,7 @@ if [[ "$MINIO_CLIENT_CONTAINER_ID" == "0" ]]; then
 fi
 
 # Do tests
-TEST_CONTAINER_ID=$(docker run -d \
+TEST_CONTAINER_ID=$(cicd::container::cmd run -d \
   --name "${TEST_CONTAINER_NAME}" \
   --network "$NETWORK" \
   --rm \
@@ -146,7 +156,7 @@ TEST_CONTAINER_ID=$(docker run -d \
   -e POSTGRESQL_PASSWORD="$DATABASE_PASSWORD" \
   -e POSTGRESQL_DATABASE="$DATABASE_NAME" \
   -e FLOORPLAN_FILE="$FLOORPLAN_FILE" \
-  "$IMAGE_NAME:$IMAGE_TAG" \
+  "$(cicd::image_builder::get_full_image_name)" \
   /bin/bash -c 'sleep infinity' || echo "0")
 
 if [[ "$TEST_CONTAINER_ID" == "0" ]]; then
@@ -159,18 +169,18 @@ ARTIFACTS_DIR="$WORKSPACE/artifacts"
 mkdir -p "$ARTIFACTS_DIR"
 
 create_env_file || exit 1
-docker cp "$TESTS_ENV_FILE" "$TEST_CONTAINER_ID:/opt/app-root/tests/env.yaml"
+cicd::container::cmd cp "$TESTS_ENV_FILE" "$TEST_CONTAINER_ID:/opt/app-root/tests/env.yaml"
 
 # tests
 echo '===================================='
 echo '===     Running Tests           ===='
 echo '===================================='
 set +e
-docker exec "$TEST_CONTAINER_ID" /bin/bash -c "pytest --junitxml=test-report.xml tests"
+cicd::container::cmd exec "$TEST_CONTAINER_ID" /bin/bash -c "pytest --junitxml=test-report.xml tests"
 TEST_RESULT=$?
 set -e
 # Copy test reports
-docker cp "$TEST_CONTAINER_ID:/opt/app-root/test-report.xml" "$WORKSPACE/artifacts/junit-test-report.xml"
+cicd::container::cmd cp "$TEST_CONTAINER_ID:/opt/app-root/test-report.xml" "$WORKSPACE/artifacts/junit-test-report.xml"
 
 if [[ $TEST_RESULT -ne 0 ]]; then
   echo '====================================='
