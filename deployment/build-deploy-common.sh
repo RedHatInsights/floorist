@@ -240,11 +240,9 @@ build_deploy_main() {
         return 1
     fi
 
-    if ! local_build; then
-        push_image "$IMAGE_TAG"
-        tag_image "latest"
-        push_image "latest"
-    fi
+    push_image "$IMAGE_TAG"
+    tag_image "latest"
+    push_image "latest"
 
     # To enable backwards compatibility with ci, qa, and smoke, always push latest and qa tags
     if backwards_compatibility_enabled; then
