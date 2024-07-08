@@ -16,7 +16,7 @@ services:
         target: /opt/app-root/src/postgresql-start/enable-extensions.sh:z
 
   minio:
-    image: quay.io/cloudservices/minio
+    image: quay.io/minio/minio
     command: server /data
     ports:
       - 9000:9000
@@ -24,7 +24,7 @@ services:
       - MINIO_ACCESS_KEY=floorist
       - MINIO_SECRET_KEY=floorist
   createbucket:
-    image: docker.io/minio/mc
+    image: quay.io/minio/mc
     depends_on:
       - minio
     links:
