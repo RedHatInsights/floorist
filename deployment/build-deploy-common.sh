@@ -76,6 +76,9 @@ login_container_registry_type() {
 
 login_to_required_registries() {
 
+    # Workaround for podman bug containers/podman/issues#14568
+    container_engine_cmd info
+
     for REGISTRY in $REQUIRED_REGISTRIES_LOCAL; do
         if ! login_container_registry_type "$REGISTRY"; then
             echo "Error while attempting to log into '${REGISTRY}' registry"
