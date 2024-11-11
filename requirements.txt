@@ -32,7 +32,7 @@ pandas==2.1.4
 pg8000==1.30.4
 ply==3.11
 progressbar2==4.3.2
-psycopg2==2.9.9
+psycopg2==2.9.10
 pyarrow==14.0.2
 PyMySQL==1.1.1
 pyparsing==3.1.1
