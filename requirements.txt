@@ -44,7 +44,7 @@ rdflib==7.0.0
 redshift-connector==2.0.918
 requests==2.32.0
 requests-aws4auth==1.2.3
-s3transfer==0.10.0
+s3transfer==0.10.3
 scramp==1.4.4
 six==1.16.0
 soupsieve==2.5
