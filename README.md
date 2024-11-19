@@ -177,19 +177,20 @@ There's two ways of running the tests, you can run them locally using `pytest` f
 ```bash
 
 # Install with Test dependencies
+# You might have to escape the square brackets (e.g. when using `zsh`)
 pip install -e .[test] -r requirements.txt
 
 # Set the environment config file
 cp tests/env.yaml.example tests/env.yaml
 
 # Bring up all the required containers
-docker-compose -f tests/docker-compose.yml up -d
+docker compose -f tests/docker-compose.yml up -d
 
 # Run the tests locally
 pytest tests
 
 # Tear-down
-docker-compose -f tests/docker-compose.yml down
+docker compose -f tests/docker-compose.yml down
 ````
 
 ### Running tests from containers
