@@ -45,7 +45,7 @@ redshift-connector==2.0.918
 requests==2.32.0
 requests-aws4auth==1.2.3
 s3transfer==0.10.4
-scramp==1.4.4
+scramp==1.4.5
 six==1.16.0
 soupsieve==2.5
 SPARQLWrapper==2.0.0
