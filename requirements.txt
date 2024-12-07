@@ -17,7 +17,7 @@ et-xmlfile==1.1.0
 frozenlist==1.5.0
 greenlet==3.0.3
 gremlinpython==3.7.3
-idna==3.7
+idna==3.10
 isodate==0.6.1
 jmespath==1.0.1
 jsonpath-ng==1.6.0
