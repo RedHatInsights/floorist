@@ -7,5 +7,16 @@
     ],
     "ignorePaths": [
       ".pre-commit-config.yaml"
-    ]
+    ],
+    "pip-requirements": {
+        "packageRules": [
+            {
+                "updateTypes": [
+                    "minor",
+                    "patch"
+                ],
+                "groupName": "Pip requirements"
+            }
+        ]
+    }
 }
