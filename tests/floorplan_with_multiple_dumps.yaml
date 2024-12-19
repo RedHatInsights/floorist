@@ -1,4 +1,0 @@
-- query: SELECT * FROM (VALUES (1, 'one'), (2, 'two'), (3, 'three')) AS t (num,letter);
-  prefix: numbers
-- query: SELECT * FROM (VALUES (1, 'Adam'), (2, 'Barbara'), (3, 'Claudia')) AS t (num,name);
-  prefix: people
