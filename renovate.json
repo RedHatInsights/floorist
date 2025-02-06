@@ -8,7 +8,7 @@
     "ignorePaths": [
       ".pre-commit-config.yaml"
     ],
-    "pip-requirements": {
+    "pip_requirements": {
         "packageRules": [
             {
                 "updateTypes": [
