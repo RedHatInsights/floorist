@@ -27,7 +27,7 @@ nest-asyncio==1.6.0
 numpy==2.2.3
 openpyxl==3.1.5
 opensearch-py==2.8.0
-packaging==23.2
+packaging==24.2
 pandas==2.2.3
 pg8000==1.31.2
 ply==3.11
