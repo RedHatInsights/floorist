@@ -33,7 +33,7 @@ pg8000==1.31.2
 ply==3.11
 progressbar2==4.5.0
 psycopg2==2.9.10
-pyarrow==14.0.2
+pyarrow==19.0.0
 PyMySQL==1.1.1
 pyparsing==3.2.1
 python-dateutil==2.9.0.post0
