@@ -42,24 +42,34 @@ EOF
 
 }
 
+function try_to_use_podman {
+  if command -v podman &> /dev/null; then
+    declare -g DOCKER="podman"
+  else
+    declare -g DOCKER="docker"
+  fi
+}
+
+try_to_use_podman
+
 function teardown_docker {
-  docker rm -f "$DB_CONTAINER_NAME" || true
-  docker rm -f "$MINIO_CONTAINER_NAME" || true
-  docker rm -f "$MINIO_CLIENT_CONTAINER_NAME" || true
-  docker rm -f "$TEST_CONTAINER_NAME" || true
+  ${DOCKER} rm -f "$DB_CONTAINER_NAME" || true
+  ${DOCKER} rm -f "$MINIO_CONTAINER_NAME" || true
+  ${DOCKER} rm -f "$MINIO_CLIENT_CONTAINER_NAME" || true
+  ${DOCKER} rm -f "$TEST_CONTAINER_NAME" || true
   try_to_delete_network || true
 }
 
 try_to_delete_network() {
 
-  if ! docker network rm "$NETWORK"; then
+  if ! ${DOCKER} network rm "$NETWORK"; then
 
     for CONTAINER_ID in "$DB_CONTAINER_NAME" "$MINIO_CONTAINER_NAME" "$MINIO_CONTAINER_NAME" "$TEST_CONTAINER_NAME"; do
-      docker rm -f "$CONTAINER_ID"
-      docker network disconnect -f "$NETWORK" "$CONTAINER_ID"
+      ${DOCKER} rm -f "$CONTAINER_ID"
+      ${DOCKER} network disconnect -f "$NETWORK" "$CONTAINER_ID"
     done
 
-    if ! docker network rm "$NETWORK"; then
+    if ! ${DOCKER} network rm "$NETWORK"; then
       echo "failed deleting network '$NETWORK'";
       return 1
     fi
@@ -68,14 +78,14 @@ try_to_delete_network() {
 
 try_to_create_container_network() {
 
-  if docker network inspect "$NETWORK" >/dev/null; then
+  if ${DOCKER} network inspect "$NETWORK" >/dev/null; then
 
     if ! try_to_delete_network "$NETWORK"; then
         return 1
     fi
   fi
 
-  if ! docker network create --driver bridge "$NETWORK"; then
+  if ! ${DOCKER} network create --driver bridge "$NETWORK"; then
     echo "failed to create network $NETWORK"
     return 1
   fi
@@ -85,7 +95,7 @@ trap "teardown_docker" EXIT SIGINT SIGTERM
 
 try_to_create_container_network || exit 1
 
-DB_CONTAINER_ID=$(docker run -d \
+DB_CONTAINER_ID=$(${DOCKER} run -d \
   --name "${DB_CONTAINER_NAME}" \
   --network "$NETWORK" \
   --rm \
@@ -100,7 +110,7 @@ if [[ "$DB_CONTAINER_ID" == "0" ]]; then
   exit 1
 fi
 
-MINIO_CONTAINER_ID=$(docker run -d \
+MINIO_CONTAINER_ID=$(${DOCKER} run -d \
   --name "${MINIO_CONTAINER_NAME}" \
   --network "$NETWORK" \
   --rm \
@@ -120,7 +130,7 @@ MINIO_CLIENT_COMMAND="""
       exit 0;
 """
 
-MINIO_CLIENT_CONTAINER_ID=$(docker run -d \
+MINIO_CLIENT_CONTAINER_ID=$(${DOCKER} run -d \
   --name "${MINIO_CLIENT_CONTAINER_NAME}" \
   --network "$NETWORK" \
   --rm \
@@ -133,7 +143,7 @@ if [[ "$MINIO_CLIENT_CONTAINER_ID" == "0" ]]; then
 fi
 
 # Do tests
-TEST_CONTAINER_ID=$(docker run -d \
+TEST_CONTAINER_ID=$(${DOCKER} run -d \
   --name "${TEST_CONTAINER_NAME}" \
   --network "$NETWORK" \
   --rm \
@@ -159,18 +169,18 @@ ARTIFACTS_DIR="$WORKSPACE/artifacts"
 mkdir -p "$ARTIFACTS_DIR"
 
 create_env_file || exit 1
-docker cp "$TESTS_ENV_FILE" "$TEST_CONTAINER_ID:/opt/app-root/tests/env.yaml"
+${DOCKER} cp "$TESTS_ENV_FILE" "$TEST_CONTAINER_ID:/opt/app-root/tests/env.yaml"
 
 # tests
 echo '===================================='
 echo '===     Running Tests           ===='
 echo '===================================='
 set +e
-docker exec "$TEST_CONTAINER_ID" /bin/bash -c "pytest --junitxml=test-report.xml tests"
+${DOCKER} exec "$TEST_CONTAINER_ID" /bin/bash -c "pytest --junitxml=test-report.xml tests"
 TEST_RESULT=$?
 set -e
 # Copy test reports
-docker cp "$TEST_CONTAINER_ID:/opt/app-root/test-report.xml" "$WORKSPACE/artifacts/junit-test-report.xml"
+${DOCKER} cp "$TEST_CONTAINER_ID:/opt/app-root/test-report.xml" "$WORKSPACE/artifacts/junit-test-report.xml"
 
 if [[ $TEST_RESULT -ne 0 ]]; then
   echo '====================================='
