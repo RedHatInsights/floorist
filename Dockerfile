@@ -1,5 +1,5 @@
-ARG deps="python3 libpq procps-ng diffutils"
-ARG devDeps="python3-devel postgresql-devel gcc"
+ARG deps="python3.12 python3.12-pip libpq procps-ng diffutils"
+ARG devDeps="python3.12 python3.12-devel python3.12-pip postgresql-devel gcc"
 
 FROM registry.access.redhat.com/ubi9/ubi-minimal AS build
 
@@ -10,7 +10,7 @@ USER 0
 ARG devDeps
 
 RUN microdnf install -y $devDeps                            && \
-    pip3 install virtualenv                                 && \
+    python3.12 -m pip  install virtualenv                   && \
     mkdir -p /opt/app-root                                  && \
     chown 1001:0 /opt/app-root
 
