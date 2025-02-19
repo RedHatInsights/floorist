@@ -195,7 +195,17 @@ docker compose -f tests/docker-compose.yml down
 
 ### Running tests from containers
 
-Alternatively, you can also run the same process the CI system runs, locally, by running the `pr_check.sh` script with the `LOCAL_BUILD=true` environment variable set:
+Alternatively, you can also run the same process the CI system runs, locally, by running the `pr_check.sh` script with the `LOCAL_BUILD=true` environment variable set.
+
+Set credentials for images repos first:
+
+```
+export QUAY_REGISTRY="quay.io"
+export QUAY_USER="<quay user>"
+export QUAY_TOKEN="<quay token>"
+export RH_REGISTRY_USER="<rh regsitry user>"
+export RH_REGISTRY_TOKEN="<rh registry token>"
+```
 
 ```
 LOCAL_BUILD=true ./pr_check.sh
