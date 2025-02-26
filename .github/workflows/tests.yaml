@@ -24,5 +24,7 @@ jobs:
         run: >
           QUAY_USER=${QUAY_USER}
           QUAY_TOKEN=${QUAY_TOKEN}
+          RH_REGISTRY_USER=${QUAY_USER}
+          RH_REGISTRY_TOKEN=${QUAY_TOKEN}
           LOCAL_BUILD=true
           ./pr_check.sh
