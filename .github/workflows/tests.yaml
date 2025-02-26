@@ -22,7 +22,7 @@ jobs:
 
       - name: Run tests
         run: >
-          QUAY_USER=${QUAY_CLOUDSERVICES_USER}
-          QUAY_TOKEN=${QUAY_CLOUDSERVICES_TOKEN}
+          QUAY_USER=${QUAY_USER}
+          QUAY_TOKEN=${QUAY_TOKEN}
           LOCAL_BUILD=true
           ./pr_check.sh
