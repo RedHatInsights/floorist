@@ -1,0 +1,51 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install Podman
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y podman
+
+      - name: is fork
+        run: echo "${{ github.event.repository.fork }}"
+
+      - name: debug
+        run: |
+          echo "$TEST_CREDS"
+        env:
+          TEST_CREDS: ${{ secrets.TEST_CREDS }}
+
+      - name: Debug TEST_CREDS
+        run: |
+          if [ -z "${TEST_CREDS}" ]; then
+            echo "TEST_CREDS is not set."
+          else
+            echo "TEST_CREDS is set."
+          fi
+        env:
+          TEST_CREDS: ${{ secrets.TEST_CREDS }}
+
+      - name: Run tests
+        shell: bash
+        run: ./pr_check.sh
+        env:
+          QUAY_USER: ${{ secrets.QUAY_USER }}
+          QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
+          RH_REGISTRY_USER: ${{ secrets.QUAY_USER }}
+          RH_REGISTRY_TOKEN: ${{ secrets.QUAY_TOKEN }}
+          REDHAT_REGISTRY: quay.io
+          LOCAL_BUILD: true
