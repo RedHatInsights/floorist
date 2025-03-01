@@ -33,7 +33,7 @@ pg8000==1.31.2
 ply==3.11
 progressbar2==4.5.0
 psycopg2==2.9.10
-pyarrow<19.0.0
+pyarrow<19.0.2
 PyMySQL==1.1.1
 pyparsing==3.2.1
 python-dateutil==2.9.0.post0
@@ -50,5 +50,5 @@ six==1.17.0
 soupsieve==2.6
 SPARQLWrapper==2.0.0
 SQLAlchemy==2.0.38
-urllib3==1.26.20
+urllib3==2.3.0
 yarl==1.18.3
