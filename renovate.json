@@ -9,15 +9,8 @@
       ".pre-commit-config.yaml"
     ],
     "pip_requirements": {
-        "packageRules": [
-            {
-                "matchUpdateTypes": [
-                    "major",
-                    "minor",
-                    "patch"
-                ],
-                "groupName": "Pip requirements"
-            }
-        ]
+        "separateMajorMinor": false,
+        "separateMinorPatch": false,
+        "groupName": "Pip requirements"
     }
 }
