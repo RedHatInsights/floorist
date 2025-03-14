@@ -1,0 +1,32 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install Podman
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y podman
+
+      - name: Run tests
+        run: |
+          RH_REGISTRY_USER=${QUAY_USER} \
+          RH_REGISTRY_TOKEN=${QUAY_TOKEN} \
+          REDHAT_REGISTRY=quay.io \
+          LOCAL_BUILD=true \
+          ./pr_check.sh
+        env:
+          QUAY_USER: ${{ secrets.QUAY_USER }}
+          QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
