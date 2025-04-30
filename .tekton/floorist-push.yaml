@@ -30,7 +30,8 @@ spec:
     value: .
   pipelineRef:
     name: docker-build-oci-ta
-  taskRunTemplate: {}
+  taskRunTemplate:
+    serviceAccountName: build-pipeline-floorist
   workspaces:
   - name: git-auth
     secret:
