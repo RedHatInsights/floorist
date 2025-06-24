@@ -39,6 +39,9 @@ jobs:
         env:
           TEST_CREDS: ${{ secrets.TEST_CREDS }}
 
+      - name: debug run
+        run: podman pull quay.io/cloudservices/centos-postgresql-12
+
       - name: Run tests
         shell: bash
         run: ./pr_check.sh
@@ -47,5 +50,6 @@ jobs:
           QUAY_TOKEN: ${{ secrets.QUAY_TOKEN }}
           RH_REGISTRY_USER: ${{ secrets.QUAY_USER }}
           RH_REGISTRY_TOKEN: ${{ secrets.QUAY_TOKEN }}
+          QUAY_REGISTRY: quay.io
           REDHAT_REGISTRY: quay.io
           LOCAL_BUILD: true
