@@ -40,7 +40,7 @@ jobs:
           TEST_CREDS: ${{ secrets.TEST_CREDS }}
 
       - name: debug run
-        run: podman pull quay.io/cloudservices/centos-postgresql-12
+        run: podman pull registry.redhat.io/rhel9/postgresql-13
 
       - name: Run tests
         shell: bash
