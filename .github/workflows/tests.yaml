@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: quay.io/cloudservices/centos-postgresql-12
+        image: quay.io/cloudservices/postgresql-rds:16
         env:
           POSTGRESQL_USER: postgres_user
           POSTGRESQL_PASSWORD: remediations
