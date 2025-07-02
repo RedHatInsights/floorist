@@ -8,9 +8,9 @@ MINIO_CLIENT_CONTAINER_NAME="floorist-minio-client-${IMAGE_TAG}"
 TEST_CONTAINER_NAME="floorist-test-${IMAGE_TAG}"
 NETWORK="floorist-test-${IMAGE_TAG}"
 
-POSTGRES_IMAGE="quay.io/cloudservices/centos-postgresql-12"
-MINIO_IMAGE="quay.io/cloudservices/minio"
-MINIO_CLIENT_IMAGE="quay.io/cloudservices/mc"
+POSTGRES_IMAGE="quay.io/cloudservices/centos-postgresql-12:20210722-70dc4d3"
+MINIO_IMAGE="quay.io/cloudservices/minio:RELEASE.2025-06-13T11-33-47Z"
+MINIO_CLIENT_IMAGE="quay.io/cloudservices/mc:RELEASE.2025-05-21T01-59-54Z"
 MINIO_BUCKET_NAME="floorist"
 MINIO_REGION="us-east-1"
 
@@ -124,9 +124,9 @@ if [[ "$MINIO_CONTAINER_ID" == "0" ]]; then
 fi
 
 MINIO_CLIENT_COMMAND="""
-      until /usr/bin/mc config host add myminio http://$MINIO_CONTAINER_NAME:9000 $MINIO_ACCESS_KEY $MINIO_SECRET_KEY >/dev/null; do sleep 1; done ;
+      until /usr/bin/mc alias set myminio http://$MINIO_CONTAINER_NAME:9000 $MINIO_ACCESS_KEY $MINIO_SECRET_KEY >/dev/null; do sleep 1; done ;
       /usr/bin/mc mb myminio/$MINIO_BUCKET_NAME;
-      /usr/bin/mc policy set download myminio/$MINIO_BUCKET_NAME;
+      /usr/bin/mc anonymous set download myminio/$MINIO_BUCKET_NAME;
       exit 0;
 """
 
