@@ -175,6 +175,8 @@ There's two ways of running the tests, you can run them locally using `pytest` f
 ### Running tests locally
 
 ```bash
+# Create venv
+python3 -m venv .venv_tests && source .venv_tests/bin/activate
 
 # Install with Test dependencies
 # You might have to escape the square brackets (e.g. when using `zsh`)
@@ -183,11 +185,11 @@ pip install -e .[test] -r requirements.txt
 # Set the environment config file
 cp tests/env.yaml.example tests/env.yaml
 
-# Bring up all the required containers
+# Bring up all the required containers (or use podman-compose)
 docker compose -f tests/docker-compose.yml up -d
 
 # Run the tests locally
-pytest tests
+pytest -vvv -s tests
 
 # Tear-down
 docker compose -f tests/docker-compose.yml down

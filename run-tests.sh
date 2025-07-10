@@ -176,7 +176,7 @@ echo '===================================='
 echo '===     Running Tests           ===='
 echo '===================================='
 set +e
-${DOCKER} exec "$TEST_CONTAINER_ID" /bin/bash -c "pytest --junitxml=test-report.xml tests"
+${DOCKER} exec "$TEST_CONTAINER_ID" /bin/bash -c "pytest -vvv -s --junitxml=test-report.xml tests"
 TEST_RESULT=$?
 set -e
 # Copy test reports
