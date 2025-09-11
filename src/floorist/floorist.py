@@ -47,7 +47,7 @@ def main():
                 chunksize = None
 
             try:
-                logging.info('[Dump #%d] Dumping to %s with chuksize %s', dump_count, row['prefix'], chunksize)
+                logging.info('[Dump #%d] Dumping to %s with chunksize %s', dump_count, row['prefix'], chunksize)
                 logging.debug('[Dump #%d] Query: %s', dump_count, row['query'])
 
                 cursor = pd.read_sql(row['query'], conn, chunksize=chunksize)
