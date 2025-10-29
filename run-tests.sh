@@ -9,8 +9,8 @@ TEST_CONTAINER_NAME="floorist-test-${IMAGE_TAG}"
 NETWORK="floorist-test-${IMAGE_TAG}"
 
 POSTGRES_IMAGE="quay.io/cloudservices/centos-postgresql-12:20210722-70dc4d3"
-MINIO_IMAGE="quay.io/cloudservices/minio:RELEASE.2025-06-13T11-33-47Z"
-MINIO_CLIENT_IMAGE="quay.io/cloudservices/mc:RELEASE.2025-05-21T01-59-54Z"
+MINIO_IMAGE="quay.io/minio/minio:RELEASE.2025-06-13T11-33-47Z"
+MINIO_CLIENT_IMAGE="quay.io/minio/mc:RELEASE.2025-05-21T01-59-54Z"
 MINIO_BUCKET_NAME="floorist"
 MINIO_REGION="us-east-1"
 
