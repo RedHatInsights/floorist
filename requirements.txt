@@ -8,8 +8,8 @@ attrs==25.4.0
 awswrangler==3.14.0
 backoff==2.2.1
 beautifulsoup4==4.14.2
-boto3==1.40.64
-botocore==1.40.64
+boto3==1.40.69
+botocore==1.40.69
 certifi==2025.10.5
 charset-normalizer==3.4.4
 decorator==5.2.1
@@ -21,7 +21,7 @@ idna==3.11
 isodate==0.7.2
 jmespath==1.0.1
 jsonpath-ng==1.7.0
-lxml==5.4.0
+lxml==6.0.2
 multidict==6.7.0
 nest-asyncio==1.6.0
 numpy==2.3.4
