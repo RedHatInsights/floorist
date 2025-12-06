@@ -50,5 +50,5 @@ six==1.17.0
 soupsieve==2.8
 SPARQLWrapper==2.0.0
 SQLAlchemy==2.0.44
-urllib3==2.5.0
+urllib3==2.6.0
 yarl==1.22.0
