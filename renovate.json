@@ -16,5 +16,13 @@
         "separateMajorMinor": false,
         "separateMinorPatch": false,
         "groupName": "Pip requirements"
-    }
+    },
+     "packageRules": [
+        {
+        "matchManagers": ["pip_requirements"],
+        "matchPackageNames": ["lxml"],
+        "matchDatasources": ["pypi"],
+        "allowedVersions": "==5.4.0"
+        }
+    ]
 }
