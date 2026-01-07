@@ -16,6 +16,8 @@ import yaml
 MAX_RETRIES = 3
 RETRY_DELAY = 5  # seconds
 
+LOG_FMT = "[%(asctime)s] [%(levelname)s] %(message)s"
+
 _RETRYABLE_DB_ERROR_PATTERNS = (
     "SerializationFailure",
     "conflict with recovery",
@@ -31,7 +33,7 @@ def _is_retryable_db_error(ex: Exception) -> bool:
 
 def _configure_loglevel():
     LOGLEVEL = environ.get('LOGLEVEL', 'INFO').upper()
-    logging.basicConfig(level=LOGLEVEL)
+    logging.basicConfig(level=LOGLEVEL, format=LOG_FMT)
 
 
 def _cleanup_s3_target(dump_count, target):
