@@ -3,6 +3,7 @@ import boto3
 import pytest
 import yaml
 import logging
+import pandas as pd
 
 from botocore.exceptions import NoCredentialsError
 from datetime import date
@@ -11,7 +12,7 @@ from os import environ as env
 from sqlalchemy import exc as sqlalchemy_exc
 from sqlalchemy.exc import OperationalError
 from tempfile import NamedTemporaryFile
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch, MagicMock, mock_open
 
 
 class TestFloorist:
@@ -427,8 +428,6 @@ class TestRetryIntegration:
     @patch('pandas.read_sql')
     def test_single_retry_succeeds(self, mock_read_sql, mock_logging, mock_s3_delete, mock_s3_write):
         """Test that a single retry is successful after SerializationFailure."""
-        import pandas as pd
-
         mock_conn = Mock()
         mock_config = Mock(bucket_name="test-bucket")
 
@@ -463,8 +462,6 @@ class TestRetryIntegration:
     @patch('pandas.read_sql')
     def test_failure_mid_chunk_processing_retries_successfully(self, mock_read_sql, mock_logging, mock_s3_delete, mock_s3_write):
         """Test that failure during chunk processing triggers retry and succeeds."""
-        import pandas as pd
-
         mock_conn = Mock()
         mock_config = Mock(bucket_name="test-bucket")
 
@@ -542,8 +539,6 @@ class TestRetryIntegration:
     @patch('pandas.read_sql')
     def test_multiple_dumps_with_one_retry(self, mock_read_sql, mock_logging, mock_s3_delete, mock_s3_write):
         """Test that retry logic works correctly when called multiple times for different dumps."""
-        import pandas as pd
-
         mock_conn = Mock()
         mock_config = Mock(bucket_name="test-bucket")
 
@@ -575,3 +570,66 @@ class TestRetryIntegration:
         assert mock_conn.commit.call_count == 2, "Should commit twice (dump1 success, dump2 retry success)"
         assert mock_s3_delete.call_count == 1, "Should cleanup S3 once before dump2 retry"
         assert mock_s3_write.call_count == 2, "Should write twice (dump1, dump2 retry)"
+
+
+@pytest.mark.standalone
+class TestTransactionIsolation:
+    @patch('pandas.read_sql')
+    @patch('floorist.floorist.boto3.setup_default_session')
+    @patch('floorist.floorist.yaml.safe_load')
+    @patch('floorist.floorist.open', new_callable=mock_open)
+    @patch('floorist.floorist.create_engine')
+    @patch('floorist.floorist.get_config')
+    @patch('floorist.floorist.wr.s3.list_directories')
+    @patch('floorist.floorist.wr.s3.to_parquet')
+    def test_each_query_commits_separately(
+        self,
+        mock_s3_write,
+        mock_s3_list,
+        mock_get_config,
+        mock_create_engine,
+        mock_file,
+        mock_yaml_load,
+        mock_boto_session,
+        mock_read_sql,
+    ):
+        mock_config = Mock(
+            bucket_name="test-bucket",
+            bucket_url="http://localhost:9000",
+            bucket_access_key="access",
+            bucket_secret_key="secret",
+            bucket_region="us-east-1",
+            floorplan_filename="test.yaml",
+        )
+        mock_get_config.return_value = mock_config
+
+        call_order = []
+
+        # Setup mock connection with commit tracking
+        mock_conn = Mock()
+        mock_conn.commit.side_effect = lambda: call_order.append('commit')
+
+        mock_engine = Mock()
+        mock_engine.connect.return_value.execution_options.return_value = mock_conn
+        mock_create_engine.return_value = mock_engine
+
+        floorplan_rows = [
+            {'query': 'SELECT * FROM table1', 'prefix': 'prefix1'},
+            {'query': 'SELECT * FROM table2', 'prefix': 'prefix2'},
+        ]
+        mock_yaml_load.return_value = floorplan_rows
+
+        def track_read_sql(*args, **kwargs):
+            call_order.append('read_sql')
+            return [pd.DataFrame({'id': [1]})]
+
+        mock_read_sql.side_effect = track_read_sql
+
+        # Run main
+        main()
+
+        # Expect: read_sql, commit, read_sql, commit (interleaved)
+        # NOT: read_sql, read_sql, commit, commit (batched)
+        assert call_order == ['read_sql', 'commit', 'read_sql', 'commit'], (
+            f"Expected interleaved pattern, got: {call_order}"
+        )
