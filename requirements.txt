@@ -5,11 +5,11 @@ app-common-python==0.2.9
 asn1crypto==1.5.1
 async-timeout<5.0.2
 attrs==25.4.0
-awswrangler==3.15.0
+awswrangler==3.15.1
 backoff==2.2.1
 beautifulsoup4==4.14.3
-boto3==1.42.39
-botocore==1.42.39
+boto3==1.42.44
+botocore==1.42.44
 certifi==2026.1.4
 charset-normalizer==3.4.4
 decorator==5.2.1
@@ -27,8 +27,8 @@ nest-asyncio==1.6.0
 numpy==2.4.2
 openpyxl==3.1.5
 opensearch-py==3.1.0
-packaging==25.0
-pandas==2.3.3
+packaging==26.0
+pandas==3.0.0
 pg8000==1.31.5
 ply==3.11
 progressbar2==4.5.0
