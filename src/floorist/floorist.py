@@ -1,4 +1,7 @@
 from datetime import date
+
+import botocore.exceptions
+
 from floorist.config import get_config
 from os import environ
 from sqlalchemy import create_engine
@@ -206,7 +209,17 @@ def main():
     boto3.setup_default_session(aws_access_key_id=config.bucket_access_key, aws_secret_access_key=config.bucket_secret_key, region_name=config.bucket_region)
 
     # Fails if can't connect to S3 or the bucket does not exist
-    wr.s3.list_directories(f"s3://{config.bucket_name}")
+    try:
+        wr.s3.list_directories(f"s3://{config.bucket_name}")
+    except botocore.exceptions.ClientError as e:
+        # On an exception, try again with a trailing slash since the client might not have
+        # ListBuckets permission on the bucket name itself, but only on items beneath it.
+        error_code = e.response.get("Error", {}).get("Code")
+        if error_code in {"AccessDenied"}:
+            wr.s3.list_directories(f"s3://{config.bucket_name.rstrip('/')}/")
+        else:
+            raise
+
     logging.info('Successfully connected to the S3 bucket')
 
     engine = create_engine(f"postgresql://{config.database_username}:{config.database_password}@{config.database_hostname}/{config.database_name}")
