@@ -1,9 +1,11 @@
 from datetime import date
 from enum import Enum
+from typing import Generator
 
 import botocore.exceptions
+from pandas import DataFrame
 
-from floorist.config import get_config
+from floorist.config import get_config, Config
 from os import environ
 from sqlalchemy import create_engine
 from sqlalchemy import exc as sqlalchemy_exc
@@ -57,6 +59,31 @@ class RetryPolicy:
         return any(p in error_str for p in _RETRYABLE_DB_ERROR_PATTERNS)
 
 
+class DatabaseClient:
+    def __init__(self, config: Config):
+        self.engine = create_engine(
+            f"postgresql://{config.database_username}:{config.database_password}@{config.database_hostname}/{config.database_name}"
+        )
+        self.conn = self.engine.connect().execution_options(stream_results=True)
+
+    def execute_query(self, query, chunksize) -> Generator[DataFrame, None, None]:
+        result = pd.read_sql(query, self.conn, chunksize=chunksize)
+        if isinstance(result, DataFrame):
+            yield result
+        else:
+            yield from result
+
+    def commit(self):
+        self.conn.commit()
+
+    def rollback(self):
+        self.conn.rollback()
+
+    def close(self):
+        self.conn.close()
+        self.engine.dispose()
+
+
 def _configure_loglevel():
     LOGLEVEL = environ.get('LOGLEVEL', 'INFO').upper()
     logging.basicConfig(level=LOGLEVEL, format=LOG_FMT)
@@ -77,10 +104,9 @@ def _cleanup_s3_target(dump_count, target):
         )
         return False
 
-
-def _safe_rollback(conn, dump_count):
+def _safe_rollback(db_client, dump_count):
     try:
-        conn.rollback()
+        db_client.rollback()
         logging.warning(
             "[Dump #%d] Database serialization/recovery conflict detected. "
             "Rolling back transaction.",
@@ -92,19 +118,9 @@ def _safe_rollback(conn, dump_count):
         )
 
 
-def _write_chunks(path, target, row, conn, config, dump_count):
-    chunksize = row.get('chunksize', 1000)
-    if chunksize == 0:
-        chunksize = None
-    query = row["query"]
-
+def _write_chunks(path, target, query, chunksize, db_client, config, dump_count):
     logging.debug("[Dump #%d] Query: %s", dump_count, query)
-
-    cursor = pd.read_sql(query, conn, chunksize=chunksize)
-
-    # This should allow the parsing of non-streamed results with the same iterative approach below
-    if isinstance(cursor, pd.DataFrame):
-        cursor = [cursor]
+    cursor = db_client.execute_query(query, chunksize)
 
     uuids = {}
 
@@ -135,17 +151,17 @@ def _write_chunks(path, target, row, conn, config, dump_count):
             logging.info("[Dump #%d] Empty folder created for empty result", dump_count)
 
     logging.debug(
-        "[Dump #%d] Dumped %s to %s", dump_count, row['query'], row['prefix']
+        "[Dump #%d] Dumped %s to %s", dump_count, query, path
     )
 
 
-def _dump_with_retry(row, conn, config, dump_count):
+def _dump_with_retry(row, db_client, config, dump_count):
     """
     Execute a dump with retry logic.
 
     Args:
         row: Floorplan row configuration containing 'query', 'prefix', etc.
-        conn: Database connection object
+        db_client: DatabaseClient object
         config: Configuration object with bucket_name, etc.
         dump_count: The dump number for logging
 
@@ -155,6 +171,8 @@ def _dump_with_retry(row, conn, config, dump_count):
     try:
         path = f"{row['prefix']}/{date.today().strftime('year_created=%Y/month_created=%-m/day_created=%-d')}"
         target = f"s3://{config.bucket_name}/{path}"
+        query = row["query"]
+        chunksize = row.get("chunksize", 1000) or None
     except KeyError as ex:
         logging.exception("[Dump #%d] %s", dump_count, ex)
         return False
@@ -181,21 +199,23 @@ def _dump_with_retry(row, conn, config, dump_count):
             _write_chunks(
                 path,
                 target,
-                row,
-                conn,
+                query,
+                chunksize,
+                db_client,
                 config,
                 dump_count
             )
 
             # Commit the transaction to release resources and prevent long-running transactions
-            conn.commit()
+            db_client.commit()
             return True  # Success
 
         except (
             sqlalchemy_exc.OperationalError,
             sqlalchemy_exc.PendingRollbackError,
         ) as ex:
-            _safe_rollback(conn, dump_count)
+            _safe_rollback(db_client, dump_count)
+
             retry_result = retry_policy.evaluate(ex, attempt)
 
             if retry_result == RetryResult.FAILURE:
@@ -248,8 +268,7 @@ def main():
 
     logging.info('Successfully connected to the S3 bucket')
 
-    engine = create_engine(f"postgresql://{config.database_username}:{config.database_password}@{config.database_hostname}/{config.database_name}")
-    conn = engine.connect().execution_options(stream_results=True)
+    db_client: DatabaseClient = DatabaseClient(config)
     logging.info('Successfully connected to the database')
 
     dump_count = 0
@@ -259,12 +278,12 @@ def main():
         for row in yaml.safe_load(stream):
             dump_count += 1
 
-            if _dump_with_retry(row, conn, config, dump_count):
+            if _dump_with_retry(row, db_client, config, dump_count):
                 dumped_count += 1
 
     logging.info('Dumped %d from total of %d', dumped_count, dump_count)
 
-    conn.close()
+    db_client.close()
 
     if dumped_count != dump_count:
         exit(1)

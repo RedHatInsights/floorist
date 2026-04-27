@@ -181,21 +181,20 @@ class TestCleanupS3Target:
 
     @patch('floorist.floorist.logging')
     @patch('floorist.floorist._cleanup_s3_target')
-    @patch('pandas.read_sql')
-    def test_retry_fails_when_s3_cleanup_fails(self, mock_read_sql, mock_cleanup, mock_logging):
+    def test_retry_fails_when_s3_cleanup_fails(self, mock_cleanup, mock_logging):
         """Test that retry attempt fails immediately when S3 cleanup fails."""
         mock_cleanup.return_value = False
 
         mock_conn = Mock()
         mock_config = Mock(bucket_name="test-bucket")
 
-        mock_read_sql.side_effect = [
+        mock_conn.execute_query.side_effect = [
             sqlalchemy_exc.OperationalError(
                 "statement", "params",
                 orig=Exception("SerializationFailure: terminating connection"),
                 connection_invalidated=False
             ),
-            MagicMock()
+            iter([MagicMock()])
         ]
 
         row = {'query': 'SELECT 1', 'prefix': 'test-prefix', 'chunksize': 1000}
@@ -208,7 +207,7 @@ class TestCleanupS3Target:
             '[Dump #%d] Cannot retry due to S3 cleanup failure', 1
         )
 
-        assert mock_read_sql.call_count == 1, "Should not retry after S3 cleanup fails"
+        assert mock_conn.execute_query.call_count == 1, "Should not retry after S3 cleanup fails"
 
 
 @pytest.mark.standalone
@@ -218,28 +217,28 @@ class TestRetryIntegration:
     @patch('floorist.floorist.wr.s3.to_parquet')
     @patch('floorist.floorist.wr.s3.delete_objects')
     @patch('floorist.floorist.logging')
-    @patch('pandas.read_sql')
-    def test_single_retry_succeeds(self, mock_read_sql, mock_logging, mock_s3_delete, mock_s3_write):
+    def test_single_retry_succeeds(self, mock_logging, mock_s3_delete, mock_s3_write):
         """Test that a single retry is successful after SerializationFailure."""
         mock_conn = Mock()
         mock_config = Mock(bucket_name="test-bucket")
 
         test_df = pd.DataFrame({'id': [1, 2, 3], 'value': ['a', 'b', 'c']})
 
-        mock_read_sql.side_effect = [
+        mock_conn.execute_query.side_effect = [
             sqlalchemy_exc.OperationalError(
                 "statement", "params",
                 orig=Exception("SerializationFailure: terminating connection"),
                 connection_invalidated=False
             ),
-            [test_df]
+            iter([test_df])
         ]
 
         row = {'query': 'SELECT * FROM test', 'prefix': 'test-prefix', 'chunksize': 1000}
         result = _dump_with_retry(row, mock_conn, mock_config, dump_count=1)
 
         assert result is True, "Dump should succeed on retry"
-        assert mock_read_sql.call_count == 2, "Should call read_sql twice (initial + 1 retry)"
+        assert mock_conn.execute_query.call_count == 2, \
+            "Should call read_sql twice (initial + 1 retry)"
         mock_conn.rollback.assert_called_once()
         mock_conn.commit.assert_called_once()
         mock_s3_delete.assert_called_once()
@@ -252,8 +251,7 @@ class TestRetryIntegration:
     @patch('floorist.floorist.wr.s3.to_parquet')
     @patch('floorist.floorist.wr.s3.delete_objects')
     @patch('floorist.floorist.logging')
-    @patch('pandas.read_sql')
-    def test_failure_mid_chunk_processing_retries_successfully(self, mock_read_sql, mock_logging, mock_s3_delete, mock_s3_write):
+    def test_failure_mid_chunk_processing_retries_successfully(self, mock_logging, mock_s3_delete, mock_s3_write):
         """Test that failure during chunk processing triggers retry and succeeds."""
         mock_conn = Mock()
         mock_config = Mock(bucket_name="test-bucket")
@@ -271,21 +269,22 @@ class TestRetryIntegration:
                 connection_invalidated=False
             )
 
-        mock_read_sql.side_effect = [
+        mock_conn.execute_query.side_effect = [
             failing_iterator(),
-            [chunk1, chunk2, chunk3]
+            iter([chunk1, chunk2, chunk3])
         ]
 
         row = {'query': 'SELECT * FROM test', 'prefix': 'test-prefix', 'chunksize': 1000}
         result = _dump_with_retry(row, mock_conn, mock_config, dump_count=1)
 
         assert result is True, "Dump should succeed on retry"
-        assert mock_read_sql.call_count == 2, "Should call read_sql twice (initial + 1 retry)"
+        assert mock_conn.execute_query.call_count == 2, "Should call read_sql twice (initial + 1 retry)"
         mock_conn.rollback.assert_called_once()
         mock_conn.commit.assert_called_once()
         mock_s3_delete.assert_called_once()
 
-        assert mock_s3_write.call_count == 5, "Should write 2 chunks (failed attempt) + 3 chunks (successful retry)"
+        assert mock_s3_write.call_count == 5, \
+            "Should write 2 chunks (failed attempt) + 3 chunks (successful retry)"
 
         # Check that chunk writes were logged (first attempt: chunks 1, 2; retry: chunks 1, 2, 3)
         chunk_log_calls = [
@@ -297,14 +296,13 @@ class TestRetryIntegration:
     @patch('floorist.floorist.wr.s3.to_parquet')
     @patch('floorist.floorist.wr.s3.delete_objects')
     @patch('floorist.floorist.logging')
-    @patch('pandas.read_sql')
     @patch('floorist.floorist.time.sleep')
-    def test_exhausted_retries_fails(self, mock_sleep, mock_read_sql, mock_logging, mock_s3_delete, mock_s3_write):
+    def test_exhausted_retries_fails(self, mock_sleep, mock_logging, mock_s3_delete, mock_s3_write):
         """Test that exhausting all retries results in failure."""
         mock_conn = Mock()
         mock_config = Mock(bucket_name="test-bucket")
 
-        mock_read_sql.side_effect = sqlalchemy_exc.OperationalError(
+        mock_conn.execute_query.side_effect = sqlalchemy_exc.OperationalError(
             "statement", "params",
             orig=Exception("SerializationFailure: terminating connection"),
             connection_invalidated=False
@@ -320,7 +318,8 @@ class TestRetryIntegration:
         actual_delays = [c.args[0] for c in mock_sleep.call_args_list]
         assert actual_delays == expected_delays
 
-        assert mock_read_sql.call_count == MAX_RETRIES, f"Should call read_sql {MAX_RETRIES} times (initial + {MAX_RETRIES - 1} retries)"
+        assert mock_conn.execute_query.call_count == MAX_RETRIES, \
+            f"Should call read_sql {MAX_RETRIES} times nitial + {MAX_RETRIES - 1} retries"
         assert mock_conn.rollback.call_count == MAX_RETRIES, f"Should rollback {MAX_RETRIES} times"
         mock_conn.commit.assert_not_called()
         assert mock_s3_delete.call_count == MAX_RETRIES - 1, "Should cleanup S3 before each retry"
@@ -329,8 +328,7 @@ class TestRetryIntegration:
     @patch('floorist.floorist.wr.s3.to_parquet')
     @patch('floorist.floorist.wr.s3.delete_objects')
     @patch('floorist.floorist.logging')
-    @patch('pandas.read_sql')
-    def test_multiple_dumps_with_one_retry(self, mock_read_sql, mock_logging, mock_s3_delete, mock_s3_write):
+    def test_multiple_dumps_with_one_retry(self, mock_logging, mock_s3_delete, mock_s3_write):
         """Test that retry logic works correctly when called multiple times for different dumps."""
         mock_conn = Mock()
         mock_config = Mock(bucket_name="test-bucket")
@@ -340,14 +338,14 @@ class TestRetryIntegration:
 
         # First dump succeeds immediately
         # Second dump fails once, then succeeds
-        mock_read_sql.side_effect = [
-            [df1],
+        mock_conn.execute_query.side_effect = [
+            iter([df1]),
             sqlalchemy_exc.OperationalError(
                 "statement", "params",
                 orig=Exception("SerializationFailure: terminating connection"),
                 connection_invalidated=False
             ),
-            [df2]
+            iter([df2])
         ]
 
         row1 = {'query': 'SELECT * FROM table1', 'prefix': 'prefix1', 'chunksize': 1000}
@@ -358,7 +356,8 @@ class TestRetryIntegration:
 
         assert result1 is True, "First dump should succeed"
         assert result2 is True, "Second dump should succeed on retry"
-        assert mock_read_sql.call_count == 3, "Should call read_sql 3 times (dump1, dump2 fail, dump2 retry)"
+        assert mock_conn.execute_query.call_count == 3, \
+            "Should call read_sql 3 times (dump1, dump2 fail, dump2 retry)"
         assert mock_conn.rollback.call_count == 1, "Should rollback once for dump2"
         assert mock_conn.commit.call_count == 2, "Should commit twice (dump1 success, dump2 retry success)"
         assert mock_s3_delete.call_count == 1, "Should cleanup S3 once before dump2 retry"
@@ -476,7 +475,7 @@ class TestS3BucketFallback:
 
 @pytest.mark.standalone
 class TestTransactionIsolation:
-    @patch('pandas.read_sql')
+    @patch('floorist.floorist.pd.read_sql')
     @patch('floorist.floorist.boto3.setup_default_session')
     @patch('floorist.floorist.yaml.safe_load')
     @patch('floorist.floorist.open', new_callable=mock_open)
