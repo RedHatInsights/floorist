@@ -1,19 +1,25 @@
-version: "3"
 services:
   db:
-    image: quay.io/cloudservices/centos-postgresql-12:20210722-70dc4d3
+    image: quay.io/sclorg/postgresql-16-c9s:c9s
     restart: always
     environment:
+      - POSTGRES_HOST_AUTH_METHOD=trust
+      - POSTGRESQL_ADMIN_PASSWORD=flooristadmin
       - POSTGRESQL_PASSWORD=floorist
       - POSTGRESQL_USER=floorist
       - POSTGRESQL_DATABASE=floorist
-      - POSTGRESQL_ADMIN_PASSWORD=flooristadmin
     ports:
-      - 5432:5432
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "--username=postgres", "--host=127.0.0.1", "--port=5432"]
+      interval: 2s
+      timeout: 1m
+      retries: 5
+      start_period: 10s
     volumes:
-      - type: bind
-        source: ${PWD}/enable-extensions.sh
-        target: /opt/app-root/src/postgresql-start/enable-extensions.sh:z
+        - "${PWD}/postgresql.conf:/opt/app-root/src/postgresql-cfg/postgresql.conf:z"
+        - "${PWD}/pg_hba.conf:/pg_hba.conf:z"
+        - "${PWD}/enable-extensions.sh:/opt/app-root/src/postgresql-start/enable-extensions.sh:z"
 
   minio:
     image: quay.io/minio/minio:RELEASE.2025-06-13T11-33-47Z
@@ -23,11 +29,10 @@ services:
     environment:
       - MINIO_ACCESS_KEY=floorist
       - MINIO_SECRET_KEY=floorist
+
   createbucket:
     image: quay.io/minio/mc:RELEASE.2025-05-21T01-59-54Z
     depends_on:
-      - minio
-    links:
       - minio
     entrypoint: /bin/sh
     command: -c '
