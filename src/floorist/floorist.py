@@ -1,4 +1,5 @@
 from datetime import date
+from enum import Enum
 
 import botocore.exceptions
 
@@ -29,9 +30,31 @@ _RETRYABLE_DB_ERROR_PATTERNS = (
 )
 
 
-def _is_retryable_db_error(ex: Exception) -> bool:
-    error_str = str(ex)
-    return any(pattern in error_str for pattern in _RETRYABLE_DB_ERROR_PATTERNS)
+class RetryResult(Enum):
+    RETRY = "retry"
+    FAILURE = "failure"
+    EXHAUSTED = "exhausted"
+
+
+class RetryPolicy:
+    def __init__(self, max_retries=3, base_delay=5):
+        self.max_retries = max_retries
+        self.base_delay = base_delay
+
+    def evaluate(self, ex: Exception, attempt: int) -> RetryResult:
+        if not self._is_retryable(ex):
+            return RetryResult.FAILURE
+        if attempt >= self.max_retries - 1:
+            return RetryResult.EXHAUSTED
+        return RetryResult.RETRY
+
+    def backoff_delay(self, attempt: int) -> float:
+        return self.base_delay * (2 ** attempt)
+
+    @staticmethod
+    def _is_retryable(ex: Exception) -> bool:
+        error_str = str(ex)
+        return any(p in error_str for p in _RETRYABLE_DB_ERROR_PATTERNS)
 
 
 def _configure_loglevel():
@@ -136,6 +159,7 @@ def _dump_with_retry(row, conn, config, dump_count):
         logging.exception("[Dump #%d] %s", dump_count, ex)
         return False
 
+    retry_policy: RetryPolicy = RetryPolicy(MAX_RETRIES, RETRY_DELAY)
     for attempt in range(MAX_RETRIES):
         try:
             if attempt > 0:
@@ -172,15 +196,17 @@ def _dump_with_retry(row, conn, config, dump_count):
             sqlalchemy_exc.PendingRollbackError,
         ) as ex:
             _safe_rollback(conn, dump_count)
-            if not _is_retryable_db_error(ex):
+            retry_result = retry_policy.evaluate(ex, attempt)
+
+            if retry_result == RetryResult.FAILURE:
                 logging.exception("[Dump #%d] %s", dump_count, ex)
                 break
 
-            if attempt >= MAX_RETRIES - 1:
+            if retry_result == RetryResult.EXHAUSTED:
                 logging.exception("[Dump #%d] Retries exhausted %s", dump_count, ex)
                 break
 
-            backoff_time = RETRY_DELAY * (2 ** attempt)  # 5s, 10s, 20s
+            backoff_time = retry_policy.backoff_delay(attempt)
             logging.warning(
                 "[Dump #%d] Retrying in %d seconds due to: %s",
                 dump_count,

@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 import yaml
 
-from floorist.floorist import main, _is_retryable_db_error, _safe_rollback, _cleanup_s3_target, _dump_with_retry, MAX_RETRIES, RETRY_DELAY
+from floorist.floorist import main, RetryPolicy, RetryResult, _safe_rollback, _cleanup_s3_target, _dump_with_retry, MAX_RETRIES, RETRY_DELAY
 from os import environ
 from sqlalchemy import exc as sqlalchemy_exc
 from unittest.mock import Mock, patch, MagicMock, mock_open
@@ -17,55 +17,57 @@ class TestIsRetryableDbError:
         """Test that SerializationFailure errors are identified as retryable."""
         mock_ex = Mock(spec=sqlalchemy_exc.OperationalError)
         mock_ex.__str__ = Mock(return_value="SerializationFailure: terminating connection")
-
-        result = _is_retryable_db_error(mock_ex)
-
-        assert result is True, "SerializationFailure should be retryable"
+        result = RetryPolicy(max_retries=3).evaluate(mock_ex, attempt=1)
+        assert result == RetryResult.RETRY, "SerializationFailure should be retryable"
 
     def test_conflict_with_recovery_is_retryable(self):
         """Test that 'conflict with recovery' errors are identified as retryable."""
         mock_ex = Mock(spec=sqlalchemy_exc.OperationalError)
         mock_ex.__str__ = Mock(return_value="terminating connection due to conflict with recovery")
-
-        result = _is_retryable_db_error(mock_ex)
-
-        assert result is True, "'conflict with recovery' should be retryable"
+        result = RetryPolicy(max_retries=3).evaluate(mock_ex, attempt=1)
+        assert result == RetryResult.RETRY, "'conflict with recovery' should be retryable"
 
     def test_pending_rollback_error_is_retryable(self):
         """Test that PendingRollbackError is identified as retryable."""
         mock_ex = Mock(spec=sqlalchemy_exc.PendingRollbackError)
         mock_ex.__str__ = Mock(return_value="PendingRollbackError: invalid transaction")
-
-        result = _is_retryable_db_error(mock_ex)
-
-        assert result is True, "PendingRollbackError should be retryable"
+        result = RetryPolicy(max_retries=3).evaluate(mock_ex, attempt=1)
+        assert result == RetryResult.RETRY, "PendingRollbackError should be retryable"
 
     def test_invalid_transaction_is_retryable(self):
         """Test that 'invalid transaction' errors are identified as retryable."""
         mock_ex = Mock(spec=sqlalchemy_exc.OperationalError)
         mock_ex.__str__ = Mock(return_value="Can't reconnect until invalid transaction is rolled back")
-
-        result = _is_retryable_db_error(mock_ex)
-
-        assert result is True, "'invalid transaction' should be retryable"
+        result = RetryPolicy(max_retries=3).evaluate(mock_ex, attempt=1)
+        assert result == RetryResult.RETRY, "'invalid transaction' should be retryable"
 
     def test_non_retryable_error(self):
         """Test that non-retryable errors are identified correctly."""
         mock_ex = Mock(spec=sqlalchemy_exc.OperationalError)
         mock_ex.__str__ = Mock(return_value="Some other database error")
-
-        result = _is_retryable_db_error(mock_ex)
-
-        assert result is False, "Non-retryable errors should return False"
+        result = RetryPolicy(max_retries=3).evaluate(mock_ex, attempt=1)
+        assert result == RetryResult.FAILURE, "Non-retryable errors should return False"
 
     def test_connection_error_is_not_retryable(self):
         """Test that connection errors are not identified as retryable."""
         mock_ex = Mock(spec=sqlalchemy_exc.OperationalError)
         mock_ex.__str__ = Mock(return_value="Connection refused")
+        result = RetryPolicy(max_retries=3).evaluate(mock_ex, attempt=1)
+        assert result == RetryResult.FAILURE, "Connection errors should not be retryable"
 
-        result = _is_retryable_db_error(mock_ex)
+    def test_retryable_error_first_attempt_returns_retry(self):
+        """Test that the first failure attempt retries."""
+        mock_ex = Mock(spec=sqlalchemy_exc.OperationalError)
+        mock_ex.__str__ = Mock(return_value="SerializationFailure: terminating connection")
+        result = RetryPolicy(max_retries=3).evaluate(mock_ex, attempt=0)
+        assert result == RetryResult.RETRY
 
-        assert result is False, "Connection errors should not be retryable"
+    def test_retryable_error_last_attempt_returns_exhausted(self):
+        """Test that the last failure attempt changes the state to EXHAUSTED."""
+        mock_ex = Mock(spec=sqlalchemy_exc.OperationalError)
+        mock_ex.__str__ = Mock(return_value="SerializationFailure: terminating connection")
+        result = RetryPolicy(max_retries=3).evaluate(mock_ex, attempt=3)
+        assert result == RetryResult.EXHAUSTED
 
 
 @pytest.mark.standalone
