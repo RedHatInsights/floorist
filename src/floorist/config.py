@@ -1,4 +1,4 @@
-from app_common_python import LoadedConfig, ObjectBuckets
+from app_common_python import LoadedConfig
 from app_common_python import isClowderEnabled
 from os import environ, access, R_OK
 from os.path import isfile
@@ -42,7 +42,7 @@ def _set_bucket_config(config):
 
 def _get_bucket_url(endpoint):
     url = urlparse(endpoint)
-    if url.scheme in ["http", "https"] or endpoint == None:
+    if url.scheme in ["http", "https"] or endpoint is None:
         return endpoint
     else:
         return f"https://{endpoint}"
