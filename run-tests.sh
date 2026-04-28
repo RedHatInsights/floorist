@@ -102,7 +102,9 @@ DB_CONTAINER_ID=$(${DOCKER} run -d \
   -e POSTGRESQL_USER="$DATABASE_USER" \
   -e POSTGRESQL_PASSWORD="$DATABASE_PASSWORD" \
   -e POSTGRESQL_DATABASE="$DATABASE_NAME" \
-  -v "${PWD}/enable-extensions.sh:/opt/app-root/src/postgresql-start/enable-extensions.sh:z" \
+  -v "${PWD}/tests/postgresql.conf:/opt/app-root/src/postgresql-cfg/postgresql.conf:z" \
+  -v "${PWD}/tests/pg_hba.conf:/pg_hba.conf:z" \
+  -v "${PWD}/tests/enable-extensions.sh:/opt/app-root/src/postgresql-start/enable-extensions.sh:z" \
   "$POSTGRES_IMAGE" || echo "0")
 
 if [[ "$DB_CONTAINER_ID" == "0" ]]; then

@@ -50,6 +50,6 @@ CMD ["floorist"]
 
 FROM base AS test
 
-ADD tests/test_* tests/floorplan_* tests/requirements.txt ./tests/
+ADD tests/test_* tests/floorplan_* tests/requirements.txt tests/postgresql.conf tests/pg_hba.conf tests/enable-extensions.sh ./tests/
 
 RUN pip install --no-cache-dir -r tests/requirements.txt
