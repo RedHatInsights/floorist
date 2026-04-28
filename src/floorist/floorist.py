@@ -128,128 +128,128 @@ class DatabaseClient:
         self.engine.dispose()
 
 
-def _configure_loglevel():
-    LOGLEVEL = environ.get('LOGLEVEL', 'INFO').upper()
-    logging.basicConfig(level=LOGLEVEL, format=LOG_FMT)
+class DumpExecutor:
+    def __init__(self, s3_client, db_client, retry_policy):
+        self.s3_client = s3_client
+        self.db_client = db_client
+        self.retry_policy = retry_policy
 
+    def _write_chunks(self, path, target, query, chunksize, dump_count):
+        logging.debug("[Dump #%d] Query: %s", dump_count, query)
+        cursor = self.db_client.execute_query(query, chunksize)
 
-def _write_chunks(path, target, query, chunksize, db_client, s3_client, dump_count):
-    logging.debug("[Dump #%d] Query: %s", dump_count, query)
-    cursor = db_client.execute_query(query, chunksize)
+        uuids = {}
 
-    uuids = {}
+        chunk = 1
+        for data in cursor:
+            if len(uuids) == 0 and len(data) > 0:
+                # Detect any columns with UUID
+                for column in data:
+                    if isinstance(data[column][0], UUID):
+                        logging.debug("[Dump #%d] UUID column detected: %s", dump_count, column)
+                        uuids[column] = "string"
 
-    chunk = 1
-    for data in cursor:
-        if len(uuids) == 0 and len(data) > 0:
-            # Detect any columns with UUID
-            for column in data:
-                if isinstance(data[column][0], UUID):
-                    logging.debug("[Dump #%d] UUID column detected: %s", dump_count, column)
-                    uuids[column] = "string"
+            # Convert any columns with UUID type to string
+            data = data.astype(uuids)
+            self.s3_client.write_parquet(data, target, path)
+            if len(data) > 0:
+                logging.info("[Dump #%d] Written parquet chunk #%d", dump_count, chunk)
+                chunk += 1
+            else:
+                logging.info("[Dump #%d] Empty folder created for empty result", dump_count)
 
-        # Convert any columns with UUID type to string
-        data = data.astype(uuids)
-        s3_client.write_parquet(data, target, path)
-        if len(data) > 0:
-            logging.info("[Dump #%d] Written parquet chunk #%d", dump_count, chunk)
-            chunk += 1
-        else:
-            logging.info("[Dump #%d] Empty folder created for empty result", dump_count)
+        logging.debug(
+            "[Dump #%d] Dumped %s to %s", dump_count, query, path
+        )
 
-    logging.debug(
-        "[Dump #%d] Dumped %s to %s", dump_count, query, path
-    )
+    def execute(self, row, dump_count) -> bool:
+        """
+        Execute a dump with retry logic.
 
+        Args:
+            row: Floorplan row configuration containing 'query', 'prefix', etc.
+            dump_count: The dump number for logging
 
-def _dump_with_retry(row, db_client, s3_client, dump_count):
-    """
-    Execute a dump with retry logic.
-
-    Args:
-        row: Floorplan row configuration containing 'query', 'prefix', etc.
-        db_client: DatabaseClient object
-        s3_client: S3Client object
-        dump_count: The dump number for logging
-
-    Returns:
-        bool: True if dump succeeded, False if dump failed
-    """
-    try:
-        path, target = s3_client.make_path(row['prefix'])
-        query = row["query"]
-        chunksize = row.get("chunksize", 1000) or None
-    except KeyError as ex:
-        logging.exception("[Dump #%d] %s", dump_count, ex)
-        return False
-
-    retry_policy: RetryPolicy = RetryPolicy(MAX_RETRIES, RETRY_DELAY)
-    for attempt in range(MAX_RETRIES):
+        Returns:
+            bool: True if dump succeeded, False if dump failed
+        """
         try:
-            if attempt > 0:
-                logging.info(
-                    "[Dump #%d] Retry %d of %d (attempt %d total)",
-                    dump_count,
-                    attempt,
-                    MAX_RETRIES - 1,
-                    attempt + 1,
-                )
-                try:
-                    s3_client.cleanup(target)
-                except Exception:
-                    logging.exception("[Dump #%d] S3 cleanup failed, cannot retry", dump_count)
-                    return False
+            path, target = self.s3_client.make_path(row['prefix'])
+            query = row["query"]
+            chunksize = row.get("chunksize", 1000) or None
+        except KeyError as ex:
+            logging.exception("[Dump #%d] %s", dump_count, ex)
+            return False
 
-            _write_chunks(
-                path,
-                target,
-                query,
-                chunksize,
-                db_client,
-                s3_client,
-                dump_count
-            )
-
-            # Commit the transaction to release resources and prevent long-running transactions
-            db_client.commit()
-            return True  # Success
-
-        except (
-            sqlalchemy_exc.OperationalError,
-            sqlalchemy_exc.PendingRollbackError,
-        ) as ex:
-            logging.warning("[Dump #%d] Database error, rolling back", dump_count)
+        for attempt in range(self.retry_policy.max_retries):
             try:
-                db_client.rollback()
-            except Exception:
-                logging.exception("[Dump #%d] Rollback failed", dump_count)
+                if attempt > 0:
+                    logging.info(
+                        "[Dump #%d] Retry %d of %d (attempt %d total)",
+                        dump_count,
+                        attempt,
+                        self.retry_policy.max_retries - 1,
+                        attempt + 1,
+                        )
+                    try:
+                        self.s3_client.cleanup(target)
+                    except Exception:
+                        logging.exception("[Dump #%d] S3 cleanup failed, cannot retry", dump_count)
+                        return False
 
-            retry_result = retry_policy.evaluate(ex, attempt)
+                self._write_chunks(
+                    path,
+                    target,
+                    query,
+                    chunksize,
+                    dump_count
+                )
 
-            if retry_result == RetryResult.FAILURE:
+                # Commit the transaction to release resources and prevent long-running transactions
+                self.db_client.commit()
+                return True  # Success
+
+            except (
+                    sqlalchemy_exc.OperationalError,
+                    sqlalchemy_exc.PendingRollbackError,
+            ) as ex:
+                logging.warning("[Dump #%d] Database error, rolling back", dump_count)
+                try:
+                    self.db_client.rollback()
+                except Exception as rollback_ex:
+                    logging.exception("[Dump #%d] Rollback failed: %s", dump_count, rollback_ex)
+
+                retry_result = self.retry_policy.evaluate(ex, attempt)
+
+                if retry_result == RetryResult.FAILURE:
+                    logging.exception("[Dump #%d] %s", dump_count, ex)
+                    break
+
+                if retry_result == RetryResult.EXHAUSTED:
+                    logging.exception("[Dump #%d] Retries exhausted %s", dump_count, ex)
+                    break
+
+                backoff_time = self.retry_policy.backoff_delay(attempt)
+                logging.warning(
+                    "[Dump #%d] Retrying in %d seconds due to: %s",
+                    dump_count,
+                    backoff_time,
+                    str(ex).split("\n")[0],
+                )
+                time.sleep(backoff_time)
+                continue
+
+            except Exception as ex:
+                # Non-retryable exceptions
                 logging.exception("[Dump #%d] %s", dump_count, ex)
                 break
 
-            if retry_result == RetryResult.EXHAUSTED:
-                logging.exception("[Dump #%d] Retries exhausted %s", dump_count, ex)
-                break
+        return False  # Dump failed
 
-            backoff_time = retry_policy.backoff_delay(attempt)
-            logging.warning(
-                "[Dump #%d] Retrying in %d seconds due to: %s",
-                dump_count,
-                backoff_time,
-                str(ex).split("\n")[0],
-            )
-            time.sleep(backoff_time)
-            continue
 
-        except Exception as ex:
-            # Non-retryable exceptions
-            logging.exception("[Dump #%d] %s", dump_count, ex)
-            break
-
-    return False  # Dump failed
+def _configure_loglevel():
+    LOGLEVEL = environ.get('LOGLEVEL', 'INFO').upper()
+    logging.basicConfig(level=LOGLEVEL, format=LOG_FMT)
 
 
 def main():
@@ -263,6 +263,10 @@ def main():
     db_client: DatabaseClient = DatabaseClient(config)
     logging.info('Successfully connected to the database')
 
+    retry_policy: RetryPolicy = RetryPolicy(MAX_RETRIES, RETRY_DELAY)
+
+    executor = DumpExecutor(s3_client, db_client, retry_policy)
+
     dump_count = 0
     dumped_count = 0
 
@@ -270,7 +274,7 @@ def main():
         for row in yaml.safe_load(stream):
             dump_count += 1
 
-            if _dump_with_retry(row, db_client, s3_client, dump_count):
+            if executor.execute(row, dump_count):
                 dumped_count += 1
 
     logging.info('Dumped %d from total of %d', dumped_count, dump_count)
