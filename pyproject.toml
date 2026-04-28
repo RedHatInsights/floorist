@@ -7,7 +7,7 @@ version = "0.0.1"
 description = "Helper for dumping SQL queries from a PostgreSQL database into S3 buckets in parquet format"
 keywords = ["S3", "Parquet", "PostgreSQL"]
 authors = [{name = "Dávid Halász (@skateman)"}]
-requires-python = ">=3.6, <4"
+requires-python = ">=3.9, <4"
 dependencies = [
     "app-common-python",
 ]
