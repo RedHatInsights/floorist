@@ -246,11 +246,17 @@ class Floorist:
         s3_client.verify()
         logging.info("Successfully connected to the S3 bucket")
 
-        db_client: DatabaseClient = DatabaseClient(config)
+        self.db_client: DatabaseClient = DatabaseClient(config)
         logging.info("Successfully connected to the database")
 
         retry_policy: RetryPolicy = RetryPolicy(MAX_RETRIES, RETRY_DELAY)
-        self.executor = DumpExecutor(s3_client, db_client, retry_policy)
+        self.executor = DumpExecutor(s3_client, self.db_client, retry_policy)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.db_client.close()
 
     def run(self):
         dump_count = 0
@@ -275,4 +281,5 @@ def _configure_loglevel():
 
 def main():
     _configure_loglevel()
-    Floorist(get_config()).run()
+    with Floorist(get_config()) as f:
+        f.run()
