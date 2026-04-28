@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 import yaml
 
-from floorist.floorist import main, RetryPolicy, RetryResult, _safe_rollback, _cleanup_s3_target, _dump_with_retry, MAX_RETRIES, RETRY_DELAY
+from floorist.floorist import main, RetryPolicy, RetryResult, _dump_with_retry, MAX_RETRIES, RETRY_DELAY
 from os import environ
 from sqlalchemy import exc as sqlalchemy_exc
 from unittest.mock import Mock, patch, MagicMock, mock_open
@@ -71,124 +71,28 @@ class TestIsRetryableDbError:
 
 
 @pytest.mark.standalone
-class TestSafeRollback:
-    """Test suite for _safe_rollback function."""
+class TestS3CleanupFailure:
+    """Test that S3 cleanup failure during retry prevents further attempts."""
 
     @pytest.fixture
-    def mock_conn(self):
-        """Mock database connection."""
+    def mock_s3(self):
+        mock = Mock()
+        mock.make_path.return_value = (
+            "test-prefix/year_created=2025/month_created=1/day_created=1",
+            "s3://test-bucket/test-prefix/year_created=2025/month_created=1/day_created=1",
+        )
+        return mock
+
+    @pytest.fixture
+    def mock_db(self):
         return Mock()
 
-    @pytest.fixture
-    def dump_count(self):
-        """Dump count for testing."""
-        return 42
-
     @patch('floorist.floorist.logging')
-    def test_successful_rollback_logs_warning(self, mock_logging, mock_conn, dump_count):
-        """Test that successful rollback logs appropriate warning."""
-        _safe_rollback(mock_conn, dump_count)
-
-        mock_conn.rollback.assert_called_once()
-        mock_logging.warning.assert_called_once_with(
-            "[Dump #%d] Database serialization/recovery conflict detected. "
-            "Rolling back transaction.",
-            dump_count
-        )
-
-    @patch('floorist.floorist.logging')
-    def test_rollback_failure_logs_error(self, mock_logging, mock_conn, dump_count):
-        """Test that rollback failure logs appropriate warning."""
-        rollback_error = Exception("Rollback failed")
-        mock_conn.rollback.side_effect = rollback_error
-
-        _safe_rollback(mock_conn, dump_count)
-
-        mock_conn.rollback.assert_called_once()
-        # Should only log the rollback error, not the success message
-        mock_logging.error.assert_called_once_with(
-            "[Dump #%d] Error during rollback: %s", dump_count, rollback_error
-        )
-
-
-@pytest.mark.standalone
-class TestCleanupS3Target:
-    """Test suite for _cleanup_s3_target function and S3 cleanup failure handling."""
-
-    @pytest.fixture
-    def dump_count(self):
-        """Dump count for testing."""
-        return 42
-
-    @pytest.fixture
-    def target(self):
-        """S3 target path."""
-        return "s3://test-bucket/test-prefix/year_created=2025/month_created=1/day_created=1"
-
-    @patch('floorist.floorist.logging')
-    @patch('floorist.floorist.wr.s3.delete_objects')
-    def test_cleanup_s3_target_success(self, mock_delete, mock_logging, dump_count, target):
-        """Test that _cleanup_s3_target returns True on successful deletion."""
-        mock_delete.return_value = None
-
-        result = _cleanup_s3_target(dump_count, target)
-
-        assert result is True, "Should return True on successful cleanup"
-        mock_delete.assert_called_once_with(target)
-        mock_logging.info.assert_called_once_with(
-            '[Dump #%d] Cleaning up S3 target before retry: %s',
-            dump_count,
-            target
-        )
-        mock_logging.error.assert_not_called()
-
-    @patch('floorist.floorist.logging')
-    @patch('floorist.floorist.wr.s3.delete_objects')
-    def test_cleanup_s3_target_failure(self, mock_delete, mock_logging, dump_count, target):
-        """Test that _cleanup_s3_target returns False on deletion failure."""
-        cleanup_error = Exception("Access Denied")
-        mock_delete.side_effect = cleanup_error
-
-        result = _cleanup_s3_target(dump_count, target)
-
-        assert result is False, "Should return False on cleanup failure"
-        mock_delete.assert_called_once_with(target)
-        mock_logging.error.assert_called_once_with(
-            '[Dump #%d] Failed to cleanup S3 target before retry: %s',
-            dump_count,
-            cleanup_error
-        )
-
-    @patch('floorist.floorist.logging')
-    @patch('floorist.floorist.wr.s3.delete_objects')
-    def test_cleanup_s3_target_handles_various_exceptions(self, mock_delete, mock_logging, dump_count, target):
-        """Test that _cleanup_s3_target handles different exception types."""
-        # Test with different exception types
-        exceptions = [
-            Exception("Generic error"),
-            IOError("IO error"),
-            RuntimeError("Runtime error"),
-        ]
-
-        for exc in exceptions:
-            mock_delete.side_effect = exc
-            mock_logging.reset_mock()
-
-            result = _cleanup_s3_target(dump_count, target)
-
-            assert result is False, f"Should return False for {type(exc).__name__}"
-            mock_logging.error.assert_called_once()
-
-    @patch('floorist.floorist.logging')
-    @patch('floorist.floorist._cleanup_s3_target')
-    def test_retry_fails_when_s3_cleanup_fails(self, mock_cleanup, mock_logging):
+    def test_retry_fails_when_s3_cleanup_fails(self, mock_logging, mock_db, mock_s3):
         """Test that retry attempt fails immediately when S3 cleanup fails."""
-        mock_cleanup.return_value = False
+        mock_s3.cleanup.side_effect = Exception("Access Denied")
 
-        mock_conn = Mock()
-        mock_config = Mock(bucket_name="test-bucket")
-
-        mock_conn.execute_query.side_effect = [
+        mock_db.execute_query.side_effect = [
             sqlalchemy_exc.OperationalError(
                 "statement", "params",
                 orig=Exception("SerializationFailure: terminating connection"),
@@ -198,33 +102,39 @@ class TestCleanupS3Target:
         ]
 
         row = {'query': 'SELECT 1', 'prefix': 'test-prefix', 'chunksize': 1000}
-        result = _dump_with_retry(row, mock_conn, mock_config, dump_count=1)
+        result = _dump_with_retry(row, mock_db, mock_s3, dump_count=1)
 
         assert result is False, "Dump should fail when S3 cleanup fails"
-        mock_cleanup.assert_called()
-
-        mock_logging.error.assert_any_call(
-            '[Dump #%d] Cannot retry due to S3 cleanup failure', 1
+        mock_s3.cleanup.assert_called_once()
+        mock_logging.exception.assert_any_call(
+            '[Dump #%d] S3 cleanup failed, cannot retry', 1
         )
-
-        assert mock_conn.execute_query.call_count == 1, "Should not retry after S3 cleanup fails"
+        assert mock_db.execute_query.call_count == 1, "Should not retry after S3 cleanup fails"
 
 
 @pytest.mark.standalone
 class TestRetryIntegration:
     """Integration tests for retry behavior in _dump_with_retry()."""
 
-    @patch('floorist.floorist.wr.s3.to_parquet')
-    @patch('floorist.floorist.wr.s3.delete_objects')
-    @patch('floorist.floorist.logging')
-    def test_single_retry_succeeds(self, mock_logging, mock_s3_delete, mock_s3_write):
-        """Test that a single retry is successful after SerializationFailure."""
-        mock_conn = Mock()
-        mock_config = Mock(bucket_name="test-bucket")
+    @pytest.fixture
+    def mock_s3(self):
+        mock = Mock()
+        mock.make_path.return_value = (
+            "test-prefix/year_created=2025/month_created=1/day_created=1",
+            "s3://test-bucket/test-prefix/year_created=2025/month_created=1/day_created=1",
+        )
+        return mock
 
+    @pytest.fixture
+    def mock_db(self):
+        return Mock()
+
+    @patch('floorist.floorist.logging')
+    def test_single_retry_succeeds(self, mock_logging, mock_s3, mock_db):
+        """Test that a single retry is successful after SerializationFailure."""
         test_df = pd.DataFrame({'id': [1, 2, 3], 'value': ['a', 'b', 'c']})
 
-        mock_conn.execute_query.side_effect = [
+        mock_db.execute_query.side_effect = [
             sqlalchemy_exc.OperationalError(
                 "statement", "params",
                 orig=Exception("SerializationFailure: terminating connection"),
@@ -234,28 +144,23 @@ class TestRetryIntegration:
         ]
 
         row = {'query': 'SELECT * FROM test', 'prefix': 'test-prefix', 'chunksize': 1000}
-        result = _dump_with_retry(row, mock_conn, mock_config, dump_count=1)
+        result = _dump_with_retry(row, mock_db, mock_s3, dump_count=1)
 
         assert result is True, "Dump should succeed on retry"
-        assert mock_conn.execute_query.call_count == 2, \
-            "Should call read_sql twice (initial + 1 retry)"
-        mock_conn.rollback.assert_called_once()
-        mock_conn.commit.assert_called_once()
-        mock_s3_delete.assert_called_once()
-        mock_s3_write.assert_called_once()
+        assert mock_db.execute_query.call_count == 2, \
+            "Should call execute_query twice (initial + 1 retry)"
+        mock_db.rollback.assert_called_once()
+        mock_db.commit.assert_called_once()
+        mock_s3.cleanup.assert_called_once()
+        mock_s3.write_parquet.assert_called_once()
 
         mock_logging.info.assert_any_call(
             '[Dump #%d] Retry %d of %d (attempt %d total)', 1, 1, MAX_RETRIES - 1, 2
         )
 
-    @patch('floorist.floorist.wr.s3.to_parquet')
-    @patch('floorist.floorist.wr.s3.delete_objects')
     @patch('floorist.floorist.logging')
-    def test_failure_mid_chunk_processing_retries_successfully(self, mock_logging, mock_s3_delete, mock_s3_write):
+    def test_failure_mid_chunk_processing_retries_successfully(self, mock_logging, mock_s3, mock_db):
         """Test that failure during chunk processing triggers retry and succeeds."""
-        mock_conn = Mock()
-        mock_config = Mock(bucket_name="test-bucket")
-
         chunk1 = pd.DataFrame({'id': [1, 2], 'value': ['a', 'b']})
         chunk2 = pd.DataFrame({'id': [3, 4], 'value': ['c', 'd']})
         chunk3 = pd.DataFrame({'id': [5, 6], 'value': ['e', 'f']})
@@ -269,21 +174,21 @@ class TestRetryIntegration:
                 connection_invalidated=False
             )
 
-        mock_conn.execute_query.side_effect = [
+        mock_db.execute_query.side_effect = [
             failing_iterator(),
             iter([chunk1, chunk2, chunk3])
         ]
 
         row = {'query': 'SELECT * FROM test', 'prefix': 'test-prefix', 'chunksize': 1000}
-        result = _dump_with_retry(row, mock_conn, mock_config, dump_count=1)
+        result = _dump_with_retry(row, mock_db, mock_s3, dump_count=1)
 
         assert result is True, "Dump should succeed on retry"
-        assert mock_conn.execute_query.call_count == 2, "Should call read_sql twice (initial + 1 retry)"
-        mock_conn.rollback.assert_called_once()
-        mock_conn.commit.assert_called_once()
-        mock_s3_delete.assert_called_once()
+        assert mock_db.execute_query.call_count == 2, "Should call execute_query twice (initial + 1 retry)"
+        mock_db.rollback.assert_called_once()
+        mock_db.commit.assert_called_once()
+        mock_s3.cleanup.assert_called_once()
 
-        assert mock_s3_write.call_count == 5, \
+        assert mock_s3.write_parquet.call_count == 5, \
             "Should write 2 chunks (failed attempt) + 3 chunks (successful retry)"
 
         # Check that chunk writes were logged (first attempt: chunks 1, 2; retry: chunks 1, 2, 3)
@@ -293,23 +198,18 @@ class TestRetryIntegration:
         ]
         assert len(chunk_log_calls) == 5, "Should log all chunk writes (2 + 3)"
 
-    @patch('floorist.floorist.wr.s3.to_parquet')
-    @patch('floorist.floorist.wr.s3.delete_objects')
     @patch('floorist.floorist.logging')
     @patch('floorist.floorist.time.sleep')
-    def test_exhausted_retries_fails(self, mock_sleep, mock_logging, mock_s3_delete, mock_s3_write):
+    def test_exhausted_retries_fails(self, mock_sleep, mock_logging, mock_s3, mock_db):
         """Test that exhausting all retries results in failure."""
-        mock_conn = Mock()
-        mock_config = Mock(bucket_name="test-bucket")
-
-        mock_conn.execute_query.side_effect = sqlalchemy_exc.OperationalError(
+        mock_db.execute_query.side_effect = sqlalchemy_exc.OperationalError(
             "statement", "params",
             orig=Exception("SerializationFailure: terminating connection"),
             connection_invalidated=False
         )
 
         row = {'query': 'SELECT * FROM test', 'prefix': 'test-prefix', 'chunksize': 1000}
-        result = _dump_with_retry(row, mock_conn, mock_config, dump_count=1)
+        result = _dump_with_retry(row, mock_db, mock_s3, dump_count=1)
 
         assert result is False, "Dump should fail after exhausting retries"
 
@@ -318,27 +218,23 @@ class TestRetryIntegration:
         actual_delays = [c.args[0] for c in mock_sleep.call_args_list]
         assert actual_delays == expected_delays
 
-        assert mock_conn.execute_query.call_count == MAX_RETRIES, \
-            f"Should call read_sql {MAX_RETRIES} times nitial + {MAX_RETRIES - 1} retries"
-        assert mock_conn.rollback.call_count == MAX_RETRIES, f"Should rollback {MAX_RETRIES} times"
-        mock_conn.commit.assert_not_called()
-        assert mock_s3_delete.call_count == MAX_RETRIES - 1, "Should cleanup S3 before each retry"
-        mock_s3_write.assert_not_called()
+        assert mock_db.execute_query.call_count == MAX_RETRIES, \
+            f"Should call execute_query {MAX_RETRIES} times (initial + {MAX_RETRIES - 1} retries)"
+        assert mock_db.rollback.call_count == MAX_RETRIES, f"Should rollback {MAX_RETRIES} times"
+        mock_db.commit.assert_not_called()
+        assert mock_s3.cleanup.call_count == MAX_RETRIES - 1, \
+            "Should cleanup S3 before each retry"
+        mock_s3.write_parquet.assert_not_called()
 
-    @patch('floorist.floorist.wr.s3.to_parquet')
-    @patch('floorist.floorist.wr.s3.delete_objects')
     @patch('floorist.floorist.logging')
-    def test_multiple_dumps_with_one_retry(self, mock_logging, mock_s3_delete, mock_s3_write):
+    def test_multiple_dumps_with_one_retry(self, mock_logging, mock_s3, mock_db):
         """Test that retry logic works correctly when called multiple times for different dumps."""
-        mock_conn = Mock()
-        mock_config = Mock(bucket_name="test-bucket")
-
         df1 = pd.DataFrame({'id': [1, 2]})
         df2 = pd.DataFrame({'id': [3, 4]})
 
         # First dump succeeds immediately
         # Second dump fails once, then succeeds
-        mock_conn.execute_query.side_effect = [
+        mock_db.execute_query.side_effect = [
             iter([df1]),
             sqlalchemy_exc.OperationalError(
                 "statement", "params",
@@ -351,17 +247,18 @@ class TestRetryIntegration:
         row1 = {'query': 'SELECT * FROM table1', 'prefix': 'prefix1', 'chunksize': 1000}
         row2 = {'query': 'SELECT * FROM table2', 'prefix': 'prefix2', 'chunksize': 1000}
 
-        result1 = _dump_with_retry(row1, mock_conn, mock_config, dump_count=1)
-        result2 = _dump_with_retry(row2, mock_conn, mock_config, dump_count=2)
+        result1 = _dump_with_retry(row1, mock_db, mock_s3, dump_count=1)
+        result2 = _dump_with_retry(row2, mock_db, mock_s3, dump_count=2)
 
         assert result1 is True, "First dump should succeed"
         assert result2 is True, "Second dump should succeed on retry"
-        assert mock_conn.execute_query.call_count == 3, \
-            "Should call read_sql 3 times (dump1, dump2 fail, dump2 retry)"
-        assert mock_conn.rollback.call_count == 1, "Should rollback once for dump2"
-        assert mock_conn.commit.call_count == 2, "Should commit twice (dump1 success, dump2 retry success)"
-        assert mock_s3_delete.call_count == 1, "Should cleanup S3 once before dump2 retry"
-        assert mock_s3_write.call_count == 2, "Should write twice (dump1, dump2 retry)"
+        assert mock_db.execute_query.call_count == 3, \
+            "Should call execute_query 3 times (dump1, dump2 fail, dump2 retry)"
+        assert mock_db.rollback.call_count == 1, "Should rollback once for dump2"
+        assert mock_db.commit.call_count == 2, "Should commit twice (dump1 success, dump2 retry success)"
+        assert mock_s3.cleanup.call_count == 1, "Should cleanup S3 once before dump2 retry"
+        assert mock_s3.write_parquet.call_count == 2, \
+            "Should write twice (dump1, dump2 retry)"
 
 
 @pytest.mark.standalone
@@ -406,14 +303,11 @@ class TestS3BucketFallback:
         mock_s3_list.assert_any_call("s3://floorist/")
         mock_dump_with_retry.assert_called()
 
-
     @patch('floorist.floorist._dump_with_retry')
-    @patch('floorist.floorist.create_engine')
     @patch('floorist.floorist.wr.s3.list_directories')
     def test_list_directories_does_not_retry_on_non_access_denied_client_error(
         self,
         mock_s3_list,
-        mock_create_engine,
         mock_dump_with_retry,
     ):
         # Simulate a non-AccessDenied ClientError from S3, e.g. NoSuchBucket
@@ -436,14 +330,11 @@ class TestS3BucketFallback:
         # _dump_with_retry must not be invoked for non-AccessDenied errors
         mock_dump_with_retry.assert_not_called()
 
-
     @patch('floorist.floorist._dump_with_retry')
-    @patch('floorist.floorist.create_engine')
     @patch('floorist.floorist.wr.s3.list_directories')
     def test_list_directories_retries_with_trailing_slash_and_fails(
         self,
         mock_s3_list,
-        mock_create_engine,
         mock_dump_with_retry,
     ):
         mock_s3_list.side_effect = [
@@ -456,13 +347,6 @@ class TestS3BucketFallback:
                 "ListBuckets",
             ),
         ]
-
-        mock_conn = Mock()
-        mock_engine = Mock()
-        mock_engine.connect.return_value.execution_options.return_value = mock_conn
-        mock_create_engine.return_value = mock_engine
-
-        mock_dump_with_retry.return_value = True
 
         with pytest.raises(botocore.exceptions.ClientError):
             main()

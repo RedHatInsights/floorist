@@ -59,6 +59,50 @@ class RetryPolicy:
         return any(p in error_str for p in _RETRYABLE_DB_ERROR_PATTERNS)
 
 
+class S3Client:
+    def __init__(self, config: Config):
+        self.bucket_name = config.bucket_name
+
+        # Compatibility with minio, setting the endpoint URL explicitly if available
+        self.bucket_url = config.bucket_url
+        if self.bucket_url:
+            wr.config.s3_endpoint_url = self.bucket_url
+
+        boto3.setup_default_session(aws_access_key_id=config.bucket_access_key, aws_secret_access_key=config.bucket_secret_key, region_name=config.bucket_region)
+
+    def verify(self):
+        # Fails if can't connect to S3 or the bucket does not exist
+        try:
+            wr.s3.list_directories(f"s3://{self.bucket_name}")
+        except botocore.exceptions.ClientError as e:
+            # On an exception, try again with a trailing slash since the client might not have
+            # ListBuckets permission on the bucket name itself, but only on items beneath it.
+            error_code = e.response.get("Error", {}).get("Code")
+            if error_code in {"AccessDenied"}:
+                wr.s3.list_directories(f"s3://{self.bucket_name.rstrip('/')}/")
+            else:
+                raise
+
+    def make_path(self, prefix):
+        path = f"{prefix}/{date.today().strftime('year_created=%Y/month_created=%-m/day_created=%-d')}"
+        target = f"s3://{self.bucket_name}/{path}"
+        return path, target
+
+    def write_parquet(self, data, target, path):
+        if len(data) > 0:
+            wr.s3.to_parquet(data, target,
+                             index=False,
+                             compression='gzip',
+                             dataset=True,
+                             mode='append'
+                             )
+        else:
+            wr._utils.client('s3').put_object(Bucket=self.bucket_name, Body='', Key=path+'/')
+
+    def cleanup(self, target):
+        wr.s3.delete_objects(target)
+
+
 class DatabaseClient:
     def __init__(self, config: Config):
         self.engine = create_engine(
@@ -89,36 +133,7 @@ def _configure_loglevel():
     logging.basicConfig(level=LOGLEVEL, format=LOG_FMT)
 
 
-def _cleanup_s3_target(dump_count, target):
-    logging.info(
-        "[Dump #%d] Cleaning up S3 target before retry: %s", dump_count, target
-    )
-    try:
-        wr.s3.delete_objects(target)
-        return True
-    except Exception as cleanup_ex:
-        logging.error(
-            "[Dump #%d] Failed to cleanup S3 target before retry: %s",
-            dump_count,
-            cleanup_ex,
-        )
-        return False
-
-def _safe_rollback(db_client, dump_count):
-    try:
-        db_client.rollback()
-        logging.warning(
-            "[Dump #%d] Database serialization/recovery conflict detected. "
-            "Rolling back transaction.",
-            dump_count,
-        )
-    except Exception as rollback_ex:
-        logging.error(
-            "[Dump #%d] Error during rollback: %s", dump_count, rollback_ex
-        )
-
-
-def _write_chunks(path, target, query, chunksize, db_client, config, dump_count):
+def _write_chunks(path, target, query, chunksize, db_client, s3_client, dump_count):
     logging.debug("[Dump #%d] Query: %s", dump_count, query)
     cursor = db_client.execute_query(query, chunksize)
 
@@ -135,19 +150,11 @@ def _write_chunks(path, target, query, chunksize, db_client, config, dump_count)
 
         # Convert any columns with UUID type to string
         data = data.astype(uuids)
-
+        s3_client.write_parquet(data, target, path)
         if len(data) > 0:
-            wr.s3.to_parquet(data, target,
-                             index=False,
-                             compression='gzip',
-                             dataset=True,
-                             mode='append'
-                             )
             logging.info("[Dump #%d] Written parquet chunk #%d", dump_count, chunk)
             chunk += 1
         else:
-            # Create an empty folder if the returned dataset is empty
-            wr._utils.client('s3').put_object(Bucket=config.bucket_name, Body='', Key=path+'/')
             logging.info("[Dump #%d] Empty folder created for empty result", dump_count)
 
     logging.debug(
@@ -155,22 +162,21 @@ def _write_chunks(path, target, query, chunksize, db_client, config, dump_count)
     )
 
 
-def _dump_with_retry(row, db_client, config, dump_count):
+def _dump_with_retry(row, db_client, s3_client, dump_count):
     """
     Execute a dump with retry logic.
 
     Args:
         row: Floorplan row configuration containing 'query', 'prefix', etc.
         db_client: DatabaseClient object
-        config: Configuration object with bucket_name, etc.
+        s3_client: S3Client object
         dump_count: The dump number for logging
 
     Returns:
         bool: True if dump succeeded, False if dump failed
     """
     try:
-        path = f"{row['prefix']}/{date.today().strftime('year_created=%Y/month_created=%-m/day_created=%-d')}"
-        target = f"s3://{config.bucket_name}/{path}"
+        path, target = s3_client.make_path(row['prefix'])
         query = row["query"]
         chunksize = row.get("chunksize", 1000) or None
     except KeyError as ex:
@@ -188,12 +194,10 @@ def _dump_with_retry(row, db_client, config, dump_count):
                     MAX_RETRIES - 1,
                     attempt + 1,
                 )
-                # On retry, clean up the S3 target to avoid duplicate data
-                if not _cleanup_s3_target(dump_count, target):
-                    logging.error(
-                        "[Dump #%d] Cannot retry due to S3 cleanup failure",
-                        dump_count,
-                    )
+                try:
+                    s3_client.cleanup(target)
+                except Exception:
+                    logging.exception("[Dump #%d] S3 cleanup failed, cannot retry", dump_count)
                     return False
 
             _write_chunks(
@@ -202,7 +206,7 @@ def _dump_with_retry(row, db_client, config, dump_count):
                 query,
                 chunksize,
                 db_client,
-                config,
+                s3_client,
                 dump_count
             )
 
@@ -214,7 +218,11 @@ def _dump_with_retry(row, db_client, config, dump_count):
             sqlalchemy_exc.OperationalError,
             sqlalchemy_exc.PendingRollbackError,
         ) as ex:
-            _safe_rollback(db_client, dump_count)
+            logging.warning("[Dump #%d] Database error, rolling back", dump_count)
+            try:
+                db_client.rollback()
+            except Exception:
+                logging.exception("[Dump #%d] Rollback failed", dump_count)
 
             retry_result = retry_policy.evaluate(ex, attempt)
 
@@ -248,24 +256,8 @@ def main():
     _configure_loglevel()
     config = get_config()
 
-    # Compatibility with minio, setting the endpoint URL explicitly if available
-    if config.bucket_url:
-      wr.config.s3_endpoint_url = config.bucket_url
-
-    boto3.setup_default_session(aws_access_key_id=config.bucket_access_key, aws_secret_access_key=config.bucket_secret_key, region_name=config.bucket_region)
-
-    # Fails if can't connect to S3 or the bucket does not exist
-    try:
-        wr.s3.list_directories(f"s3://{config.bucket_name}")
-    except botocore.exceptions.ClientError as e:
-        # On an exception, try again with a trailing slash since the client might not have
-        # ListBuckets permission on the bucket name itself, but only on items beneath it.
-        error_code = e.response.get("Error", {}).get("Code")
-        if error_code in {"AccessDenied"}:
-            wr.s3.list_directories(f"s3://{config.bucket_name.rstrip('/')}/")
-        else:
-            raise
-
+    s3_client: S3Client = S3Client(config)
+    s3_client.verify()
     logging.info('Successfully connected to the S3 bucket')
 
     db_client: DatabaseClient = DatabaseClient(config)
@@ -278,7 +270,7 @@ def main():
         for row in yaml.safe_load(stream):
             dump_count += 1
 
-            if _dump_with_retry(row, db_client, config, dump_count):
+            if _dump_with_retry(row, db_client, s3_client, dump_count):
                 dumped_count += 1
 
     logging.info('Dumped %d from total of %d', dumped_count, dump_count)
