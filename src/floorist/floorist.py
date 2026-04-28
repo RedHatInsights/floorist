@@ -247,6 +247,36 @@ class DumpExecutor:
         return False  # Dump failed
 
 
+class Floorist:
+    def __init__(self, config):
+        self.config = config
+
+        s3_client: S3Client = S3Client(config)
+        s3_client.verify()
+        logging.info('Successfully connected to the S3 bucket')
+
+        db_client: DatabaseClient = DatabaseClient(config)
+        logging.info('Successfully connected to the database')
+
+        retry_policy: RetryPolicy = RetryPolicy(MAX_RETRIES, RETRY_DELAY)
+        self.executor = DumpExecutor(s3_client, db_client, retry_policy)
+
+    def run(self):
+        dump_count = 0
+        dumped_count = 0
+
+        with open(self.config.floorplan_filename, 'r') as stream:
+            for row in yaml.safe_load(stream):
+                dump_count += 1
+
+                if self.executor.execute(row, dump_count):
+                    dumped_count += 1
+
+        logging.info('Dumped %d from total of %d', dumped_count, dump_count)
+        if dumped_count != dump_count:
+            exit(1)
+
+
 def _configure_loglevel():
     LOGLEVEL = environ.get('LOGLEVEL', 'INFO').upper()
     logging.basicConfig(level=LOGLEVEL, format=LOG_FMT)
@@ -254,32 +284,4 @@ def _configure_loglevel():
 
 def main():
     _configure_loglevel()
-    config = get_config()
-
-    s3_client: S3Client = S3Client(config)
-    s3_client.verify()
-    logging.info('Successfully connected to the S3 bucket')
-
-    db_client: DatabaseClient = DatabaseClient(config)
-    logging.info('Successfully connected to the database')
-
-    retry_policy: RetryPolicy = RetryPolicy(MAX_RETRIES, RETRY_DELAY)
-
-    executor = DumpExecutor(s3_client, db_client, retry_policy)
-
-    dump_count = 0
-    dumped_count = 0
-
-    with open(config.floorplan_filename, 'r') as stream:
-        for row in yaml.safe_load(stream):
-            dump_count += 1
-
-            if executor.execute(row, dump_count):
-                dumped_count += 1
-
-    logging.info('Dumped %d from total of %d', dumped_count, dump_count)
-
-    db_client.close()
-
-    if dumped_count != dump_count:
-        exit(1)
+    Floorist(get_config()).run()
