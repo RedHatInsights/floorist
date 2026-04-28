@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 import yaml
 
-from floorist.floorist import main, RetryPolicy, RetryResult, _dump_with_retry, MAX_RETRIES, RETRY_DELAY
+from floorist.floorist import main, RetryPolicy, RetryResult, DumpExecutor, MAX_RETRIES, RETRY_DELAY
 from os import environ
 from sqlalchemy import exc as sqlalchemy_exc
 from unittest.mock import Mock, patch, MagicMock, mock_open
@@ -102,7 +102,8 @@ class TestS3CleanupFailure:
         ]
 
         row = {'query': 'SELECT 1', 'prefix': 'test-prefix', 'chunksize': 1000}
-        result = _dump_with_retry(row, mock_db, mock_s3, dump_count=1)
+        executor = DumpExecutor(mock_s3, mock_db, RetryPolicy())
+        result = executor.execute(row, dump_count=1)
 
         assert result is False, "Dump should fail when S3 cleanup fails"
         mock_s3.cleanup.assert_called_once()
@@ -143,8 +144,9 @@ class TestRetryIntegration:
             iter([test_df])
         ]
 
+        executor = DumpExecutor(mock_s3, mock_db, RetryPolicy())
         row = {'query': 'SELECT * FROM test', 'prefix': 'test-prefix', 'chunksize': 1000}
-        result = _dump_with_retry(row, mock_db, mock_s3, dump_count=1)
+        result = executor.execute(row, dump_count=1)
 
         assert result is True, "Dump should succeed on retry"
         assert mock_db.execute_query.call_count == 2, \
@@ -179,8 +181,9 @@ class TestRetryIntegration:
             iter([chunk1, chunk2, chunk3])
         ]
 
+        executor = DumpExecutor(mock_s3, mock_db, RetryPolicy())
         row = {'query': 'SELECT * FROM test', 'prefix': 'test-prefix', 'chunksize': 1000}
-        result = _dump_with_retry(row, mock_db, mock_s3, dump_count=1)
+        result = executor.execute(row, dump_count=1)
 
         assert result is True, "Dump should succeed on retry"
         assert mock_db.execute_query.call_count == 2, "Should call execute_query twice (initial + 1 retry)"
@@ -208,8 +211,9 @@ class TestRetryIntegration:
             connection_invalidated=False
         )
 
+        executor = DumpExecutor(mock_s3, mock_db, RetryPolicy())
         row = {'query': 'SELECT * FROM test', 'prefix': 'test-prefix', 'chunksize': 1000}
-        result = _dump_with_retry(row, mock_db, mock_s3, dump_count=1)
+        result = executor.execute(row, dump_count=1)
 
         assert result is False, "Dump should fail after exhausting retries"
 
@@ -244,11 +248,13 @@ class TestRetryIntegration:
             iter([df2])
         ]
 
+        executor = DumpExecutor(mock_s3, mock_db, RetryPolicy())
+
         row1 = {'query': 'SELECT * FROM table1', 'prefix': 'prefix1', 'chunksize': 1000}
         row2 = {'query': 'SELECT * FROM table2', 'prefix': 'prefix2', 'chunksize': 1000}
 
-        result1 = _dump_with_retry(row1, mock_db, mock_s3, dump_count=1)
-        result2 = _dump_with_retry(row2, mock_db, mock_s3, dump_count=2)
+        result1 = executor.execute(row1, dump_count=1)
+        result2 = executor.execute(row2, dump_count=2)
 
         assert result1 is True, "First dump should succeed"
         assert result2 is True, "Second dump should succeed on retry"
@@ -272,14 +278,14 @@ class TestS3BucketFallback:
             for key in settings:
                 environ[key] = settings[key]
 
-    @patch('floorist.floorist._dump_with_retry')
+    @patch('floorist.floorist.DumpExecutor')
     @patch('floorist.floorist.create_engine')
     @patch('floorist.floorist.wr.s3.list_directories')
     def test_list_directories_retries_with_trailing_slash(
         self,
         mock_s3_list,
         mock_create_engine,
-        mock_dump_with_retry,
+        mock_executor,
     ):
         mock_s3_list.side_effect = [
             botocore.exceptions.ClientError(
@@ -294,21 +300,22 @@ class TestS3BucketFallback:
         mock_engine.connect.return_value.execution_options.return_value = mock_conn
         mock_create_engine.return_value = mock_engine
 
-        mock_dump_with_retry.return_value = True
+        instance = mock_executor.return_value
+        instance.execute.return_value = True
 
         main()
 
         assert mock_s3_list.call_count == 2
         mock_s3_list.assert_any_call("s3://floorist")
         mock_s3_list.assert_any_call("s3://floorist/")
-        mock_dump_with_retry.assert_called()
+        instance.execute.assert_called()
 
-    @patch('floorist.floorist._dump_with_retry')
+    @patch('floorist.floorist.DumpExecutor')
     @patch('floorist.floorist.wr.s3.list_directories')
     def test_list_directories_does_not_retry_on_non_access_denied_client_error(
         self,
         mock_s3_list,
-        mock_dump_with_retry,
+        mock_executor,
     ):
         # Simulate a non-AccessDenied ClientError from S3, e.g. NoSuchBucket
         mock_s3_list.side_effect = botocore.exceptions.ClientError(
@@ -328,14 +335,14 @@ class TestS3BucketFallback:
         # list_directories should be called exactly once and not retried
         assert mock_s3_list.call_count == 1
         # _dump_with_retry must not be invoked for non-AccessDenied errors
-        mock_dump_with_retry.assert_not_called()
+        mock_executor.return_value.execute.assert_not_called()
 
-    @patch('floorist.floorist._dump_with_retry')
+    @patch('floorist.floorist.DumpExecutor')
     @patch('floorist.floorist.wr.s3.list_directories')
     def test_list_directories_retries_with_trailing_slash_and_fails(
         self,
         mock_s3_list,
-        mock_dump_with_retry,
+        mock_executor,
     ):
         mock_s3_list.side_effect = [
             botocore.exceptions.ClientError(
@@ -354,7 +361,7 @@ class TestS3BucketFallback:
         assert mock_s3_list.call_count == 2
         mock_s3_list.assert_any_call("s3://floorist")
         mock_s3_list.assert_any_call("s3://floorist/")
-        mock_dump_with_retry.assert_not_called()
+        mock_executor.return_value.execute.assert_not_called()
 
 
 @pytest.mark.standalone
