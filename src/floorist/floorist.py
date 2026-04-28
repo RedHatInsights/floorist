@@ -51,7 +51,7 @@ class RetryPolicy:
         return RetryResult.RETRY
 
     def backoff_delay(self, attempt: int) -> float:
-        return self.base_delay * (2 ** attempt)
+        return self.base_delay * (2**attempt)
 
     @staticmethod
     def _is_retryable(ex: Exception) -> bool:
@@ -68,7 +68,11 @@ class S3Client:
         if self.bucket_url:
             wr.config.s3_endpoint_url = self.bucket_url
 
-        boto3.setup_default_session(aws_access_key_id=config.bucket_access_key, aws_secret_access_key=config.bucket_secret_key, region_name=config.bucket_region)
+        boto3.setup_default_session(
+            aws_access_key_id=config.bucket_access_key,
+            aws_secret_access_key=config.bucket_secret_key,
+            region_name=config.bucket_region,
+        )
 
     def verify(self):
         # Fails if can't connect to S3 or the bucket does not exist
@@ -90,14 +94,9 @@ class S3Client:
 
     def write_parquet(self, data, target, path):
         if len(data) > 0:
-            wr.s3.to_parquet(data, target,
-                             index=False,
-                             compression='gzip',
-                             dataset=True,
-                             mode='append'
-                             )
+            wr.s3.to_parquet(data, target, index=False, compression="gzip", dataset=True, mode="append")
         else:
-            wr._utils.client('s3').put_object(Bucket=self.bucket_name, Body='', Key=path+'/')
+            wr._utils.client("s3").put_object(Bucket=self.bucket_name, Body="", Key=path + "/")
 
     def cleanup(self, target):
         wr.s3.delete_objects(target)
@@ -158,9 +157,7 @@ class DumpExecutor:
             else:
                 logging.info("[Dump #%d] Empty folder created for empty result", dump_count)
 
-        logging.debug(
-            "[Dump #%d] Dumped %s to %s", dump_count, query, path
-        )
+        logging.debug("[Dump #%d] Dumped %s to %s", dump_count, query, path)
 
     def execute(self, row, dump_count) -> bool:
         """
@@ -174,7 +171,7 @@ class DumpExecutor:
             bool: True if dump succeeded, False if dump failed
         """
         try:
-            path, target = self.s3_client.make_path(row['prefix'])
+            path, target = self.s3_client.make_path(row["prefix"])
             query = row["query"]
             chunksize = row.get("chunksize", 1000) or None
         except KeyError as ex:
@@ -190,28 +187,22 @@ class DumpExecutor:
                         attempt,
                         self.retry_policy.max_retries - 1,
                         attempt + 1,
-                        )
+                    )
                     try:
                         self.s3_client.cleanup(target)
                     except Exception:
                         logging.exception("[Dump #%d] S3 cleanup failed, cannot retry", dump_count)
                         return False
 
-                self._write_chunks(
-                    path,
-                    target,
-                    query,
-                    chunksize,
-                    dump_count
-                )
+                self._write_chunks(path, target, query, chunksize, dump_count)
 
                 # Commit the transaction to release resources and prevent long-running transactions
                 self.db_client.commit()
                 return True  # Success
 
             except (
-                    sqlalchemy_exc.OperationalError,
-                    sqlalchemy_exc.PendingRollbackError,
+                sqlalchemy_exc.OperationalError,
+                sqlalchemy_exc.PendingRollbackError,
             ) as ex:
                 logging.warning("[Dump #%d] Database error, rolling back", dump_count)
                 try:
@@ -253,10 +244,10 @@ class Floorist:
 
         s3_client: S3Client = S3Client(config)
         s3_client.verify()
-        logging.info('Successfully connected to the S3 bucket')
+        logging.info("Successfully connected to the S3 bucket")
 
         db_client: DatabaseClient = DatabaseClient(config)
-        logging.info('Successfully connected to the database')
+        logging.info("Successfully connected to the database")
 
         retry_policy: RetryPolicy = RetryPolicy(MAX_RETRIES, RETRY_DELAY)
         self.executor = DumpExecutor(s3_client, db_client, retry_policy)
@@ -265,20 +256,20 @@ class Floorist:
         dump_count = 0
         dumped_count = 0
 
-        with open(self.config.floorplan_filename, 'r') as stream:
+        with open(self.config.floorplan_filename, "r") as stream:
             for row in yaml.safe_load(stream):
                 dump_count += 1
 
                 if self.executor.execute(row, dump_count):
                     dumped_count += 1
 
-        logging.info('Dumped %d from total of %d', dumped_count, dump_count)
+        logging.info("Dumped %d from total of %d", dumped_count, dump_count)
         if dumped_count != dump_count:
             exit(1)
 
 
 def _configure_loglevel():
-    LOGLEVEL = environ.get('LOGLEVEL', 'INFO').upper()
+    LOGLEVEL = environ.get("LOGLEVEL", "INFO").upper()
     logging.basicConfig(level=LOGLEVEL, format=LOG_FMT)
 
 
