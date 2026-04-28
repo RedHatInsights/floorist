@@ -17,9 +17,9 @@ services:
       retries: 5
       start_period: 10s
     volumes:
-        - "${PWD}/postgresql.conf:/opt/app-root/src/postgresql-cfg/postgresql.conf:z"
-        - "${PWD}/pg_hba.conf:/pg_hba.conf:z"
-        - "${PWD}/enable-extensions.sh:/opt/app-root/src/postgresql-start/enable-extensions.sh:z"
+        - "${PWD}/tests/postgresql.conf:/opt/app-root/src/postgresql-cfg/postgresql.conf:z"
+        - "${PWD}/tests/pg_hba.conf:/pg_hba.conf:z"
+        - "${PWD}/tests/enable-extensions.sh:/opt/app-root/src/postgresql-start/enable-extensions.sh:z"
 
   minio:
     image: quay.io/minio/minio:RELEASE.2025-06-13T11-33-47Z
