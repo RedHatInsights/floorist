@@ -310,10 +310,13 @@ class TestS3BucketFallback:
         instance.execute.assert_called()
 
     @patch("floorist.floorist.DumpExecutor")
+    # Defensive mock
+    @patch("floorist.floorist.create_engine")
     @patch("floorist.floorist.wr.s3.list_directories")
     def test_list_directories_does_not_retry_on_non_access_denied_client_error(
         self,
         mock_s3_list,
+        mock_create_engine,
         mock_executor,
     ):
         # Simulate a non-AccessDenied ClientError from S3, e.g. NoSuchBucket
@@ -337,10 +340,13 @@ class TestS3BucketFallback:
         mock_executor.return_value.execute.assert_not_called()
 
     @patch("floorist.floorist.DumpExecutor")
+    # Defensive mock
+    @patch("floorist.floorist.create_engine")
     @patch("floorist.floorist.wr.s3.list_directories")
     def test_list_directories_retries_with_trailing_slash_and_fails(
         self,
         mock_s3_list,
+        mock_create_engine,
         mock_executor,
     ):
         mock_s3_list.side_effect = [
