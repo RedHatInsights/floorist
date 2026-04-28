@@ -10,20 +10,19 @@ import attr
 
 @attr.s
 class Config:
-    bucket_url=attr.ib(default=None)
-    bucket_name=attr.ib(default=None)
-    bucket_secret_key=attr.ib(default=None)
-    bucket_access_key=attr.ib(default=None)
-    bucket_region=attr.ib(default=None)
-    database_hostname=attr.ib(default=None)
-    database_username=attr.ib(default=None)
-    database_password=attr.ib(default=None)
-    database_name=attr.ib(default=None)
-    floorplan_filename=attr.ib(default=None)
+    bucket_url = attr.ib(default=None)
+    bucket_name = attr.ib(default=None)
+    bucket_secret_key = attr.ib(default=None)
+    bucket_access_key = attr.ib(default=None)
+    bucket_region = attr.ib(default=None)
+    database_hostname = attr.ib(default=None)
+    database_username = attr.ib(default=None)
+    database_password = attr.ib(default=None)
+    database_name = attr.ib(default=None)
+    floorplan_filename = attr.ib(default=None)
 
 
 def get_config():
-
     config = Config()
     _set_bucket_config(config)
     _set_database_config(config)
@@ -35,22 +34,22 @@ def get_config():
 
 def _set_bucket_config(config):
     config.bucket_name = get_bucket_requested_name_from_environment()
-    config.bucket_url = _get_bucket_url(environ.get('AWS_ENDPOINT'))
-    config.bucket_secret_key = environ.get('AWS_SECRET_ACCESS_KEY')
-    config.bucket_access_key = environ.get('AWS_ACCESS_KEY_ID')
-    config.bucket_region = environ.get('AWS_REGION')
+    config.bucket_url = _get_bucket_url(environ.get("AWS_ENDPOINT"))
+    config.bucket_secret_key = environ.get("AWS_SECRET_ACCESS_KEY")
+    config.bucket_access_key = environ.get("AWS_ACCESS_KEY_ID")
+    config.bucket_region = environ.get("AWS_REGION")
 
 
 def _get_bucket_url(endpoint):
     url = urlparse(endpoint)
-    if url.scheme in ['http', 'https'] or endpoint == None:
+    if url.scheme in ["http", "https"] or endpoint == None:
         return endpoint
     else:
         return f"https://{endpoint}"
 
-def get_bucket_requested_name_from_environment():
 
-    name = environ.get('AWS_BUCKET')
+def get_bucket_requested_name_from_environment():
+    name = environ.get("AWS_BUCKET")
     if not name:
         raise ValueError("Bucket name not configured, set AWS_BUCKET variable.")
 
@@ -58,7 +57,6 @@ def get_bucket_requested_name_from_environment():
 
 
 def _set_database_config(config):
-
     if isClowderEnabled():
         _set_database_config_from_clowder(config)
     else:
@@ -74,18 +72,17 @@ def _set_database_config_from_clowder(config):
 
 
 def _set_database_config_from_environment(config):
-    config.database_hostname = environ.get('POSTGRES_SERVICE_HOST')
-    config.database_name = environ.get('POSTGRESQL_DATABASE')
-    config.database_username = environ.get('POSTGRESQL_USER')
-    config.database_password = environ.get('POSTGRESQL_PASSWORD')
+    config.database_hostname = environ.get("POSTGRES_SERVICE_HOST")
+    config.database_name = environ.get("POSTGRESQL_DATABASE")
+    config.database_username = environ.get("POSTGRESQL_USER")
+    config.database_password = environ.get("POSTGRESQL_PASSWORD")
 
 
 def _set_floorist_config(config):
-    config.floorplan_filename = environ.get('FLOORPLAN_FILE')
+    config.floorplan_filename = environ.get("FLOORPLAN_FILE")
 
 
 def _validate_config(config):
-
     if not config.floorplan_filename:
         raise ValueError("Floorplan filename not defined!")
 
