@@ -1,3 +1,35 @@
 [build-system]
-# Minimum requirements for the build system to execute.
-requires = ["setuptools", "wheel"]  # PEP 508 specifications.
+requires = ["setuptools", "wheel"]
+
+[project]
+name = "floorist"
+version = "0.0.1"
+description = "Helper for dumping SQL queries from a PostgreSQL database into S3 buckets in parquet format"
+keywords = ["S3", "Parquet", "PostgreSQL"]
+authors = [{name = "Dávid Halász (@skateman)"}]
+requires-python = ">=3.6, <4"
+dependencies = [
+    "app-common-python",
+]
+
+[project.urls]
+Homepage = "https://github.com/RedHatInsights/floorist"
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--strict-markers"
+markers = [
+    "standalone: tests that do not require a docker compose to be running",
+]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint.isort]
+order-by-type = true
+relative-imports-order = "closest-to-furthest"
+extra-standard-library = ["typing"]
+section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
