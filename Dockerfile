@@ -16,7 +16,7 @@ RUN microdnf install -y $devDeps                            && \
 
 WORKDIR /opt/app-root
 
-COPY app.py pyproject.toml setup.cfg requirements.txt ./
+COPY app.py pyproject.toml requirements.txt ./
 COPY src ./src
 
 RUN virtualenv .                          && \
