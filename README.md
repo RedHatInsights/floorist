@@ -174,9 +174,10 @@ There's two ways of running the tests, you can run them locally using `pytest` f
 
 ### Running tests locally
 
+#### Explicit
 ```bash
 # Create venv
-python3 -m venv .venv_tests && source .venv_tests/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 
 # Install with Test dependencies
 # You might have to escape the square brackets (e.g. when using `zsh`)
@@ -194,6 +195,16 @@ pytest -vvv -s tests
 # Tear-down
 docker compose -f tests/docker-compose.yml down
 ````
+
+#### Makefile
+Many of the above manual steps have been automated in the Makefile.
+
+```bash
+cp tests/env.yaml.example tests/env.yaml
+make init
+make
+make compose-down
+```
 
 ### Running tests from containers
 
