@@ -6,7 +6,7 @@ import yaml
 from floorist.floorist import main, RetryPolicy, RetryResult, DumpExecutor, MAX_RETRIES, RETRY_DELAY
 from os import environ
 from sqlalchemy import exc as sqlalchemy_exc
-from unittest.mock import Mock, patch, MagicMock, mock_open
+from unittest.mock import Mock, patch, mock_open
 
 
 @pytest.mark.standalone
@@ -99,7 +99,7 @@ class TestS3CleanupFailure:
                 orig=Exception("SerializationFailure: terminating connection"),
                 connection_invalidated=False,
             ),
-            iter([MagicMock()]),
+            iter([Mock()]),
         ]
 
         row = {"query": "SELECT 1", "prefix": "test-prefix", "chunksize": 1000}

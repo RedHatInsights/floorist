@@ -82,7 +82,7 @@ class TestFloorist:
             main()
         assert 'role "foo" does not exist' in str(ex.value)
 
-    def test_invalid_pg_databae(self):
+    def test_invalid_pg_database(self):
         env["POSTGRESQL_DATABASE"] = "foo"
         with pytest.raises(OperationalError) as ex:
             main()
