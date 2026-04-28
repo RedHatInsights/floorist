@@ -27,6 +27,9 @@ addopts = "--strict-markers"
 markers = [
     "standalone: tests that do not require a docker compose to be running",
 ]
+filterwarnings = [
+    "ignore:Exception ignored in.*_S3ObjectBase.__del__:pytest.PytestUnraisableExceptionWarning",
+]
 
 [tool.ruff]
 line-length = 120
