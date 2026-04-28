@@ -16,7 +16,7 @@ RUN microdnf install -y $devDeps                            && \
 
 WORKDIR /opt/app-root
 
-COPY app.py pyproject.toml requirements.txt ./
+COPY pyproject.toml requirements.txt ./
 COPY src ./src
 
 RUN virtualenv .                          && \
@@ -46,7 +46,7 @@ USER 1001
 ENV PATH="/opt/app-root/bin:$PATH"
 
 # Set the default command for the resulting image
-CMD python ./app.py
+CMD ["floorist"]
 
 FROM base AS test
 
