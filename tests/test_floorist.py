@@ -54,7 +54,7 @@ class TestFloorist:
 
     def test_invalid_s3_credentials(self):
         del env["AWS_ACCESS_KEY_ID"]
-        with pytest.raises(Exception) as ex:
+        with pytest.raises(Exception):
             main()
 
     def test_unset_s3_bucket(self):
@@ -80,6 +80,7 @@ class TestFloorist:
         env["POSTGRESQL_USER"] = "foo"
         with pytest.raises(OperationalError) as ex:
             main()
+        assert 'role "foo" does not exist' in str(ex.value)
 
     def test_invalid_pg_databae(self):
         env["POSTGRESQL_DATABASE"] = "foo"
