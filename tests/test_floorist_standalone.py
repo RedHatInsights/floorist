@@ -6,7 +6,7 @@ import yaml
 from floorist.floorist import main, RetryPolicy, RetryResult, DumpExecutor, MAX_RETRIES, RETRY_DELAY
 from os import environ
 from sqlalchemy import exc as sqlalchemy_exc
-from unittest.mock import Mock, patch, mock_open
+from unittest.mock import Mock, patch
 
 
 @pytest.mark.standalone
@@ -371,59 +371,23 @@ class TestS3BucketFallback:
 
 @pytest.mark.standalone
 class TestTransactionIsolation:
-    @patch("floorist.floorist.pd.read_sql")
-    @patch("floorist.floorist.boto3.setup_default_session")
-    @patch("floorist.floorist.yaml.safe_load")
-    @patch("floorist.floorist.open", new_callable=mock_open)
-    @patch("floorist.floorist.create_engine")
-    @patch("floorist.floorist.get_config")
-    @patch("floorist.floorist.wr.s3.list_directories")
-    @patch("floorist.floorist.wr.s3.to_parquet")
-    def test_each_query_commits_separately(
-        self,
-        mock_s3_write,
-        mock_s3_list,
-        mock_get_config,
-        mock_create_engine,
-        mock_file,
-        mock_yaml_load,
-        mock_boto_session,
-        mock_read_sql,
-    ):
-        mock_config = Mock(
-            bucket_name="test-bucket",
-            bucket_url="http://localhost:9000",
-            bucket_access_key="access",
-            bucket_secret_key="secret",
-            bucket_region="us-east-1",
-            floorplan_filename="test.yaml",
-        )
-        mock_get_config.return_value = mock_config
+    def test_each_query_commits_separately(self):
+        mock_s3 = Mock()
+        mock_s3.make_path.return_value = ("path", "s3://bucket/path")
 
         call_order = []
 
-        # Setup mock connection with commit tracking
-        mock_conn = Mock()
-        mock_conn.commit.side_effect = lambda: call_order.append("commit")
-
-        mock_engine = Mock()
-        mock_engine.connect.return_value.execution_options.return_value = mock_conn
-        mock_create_engine.return_value = mock_engine
-
-        floorplan_rows = [
-            {"query": "SELECT * FROM table1", "prefix": "prefix1"},
-            {"query": "SELECT * FROM table2", "prefix": "prefix2"},
-        ]
-        mock_yaml_load.return_value = floorplan_rows
-
-        def track_read_sql(*args, **kwargs):
+        def track_query(*args, **kwargs):
             call_order.append("read_sql")
-            return [pd.DataFrame({"id": [1]})]
+            return iter([pd.DataFrame({"id": [1]})])
 
-        mock_read_sql.side_effect = track_read_sql
+        mock_db = Mock()
+        mock_db.execute_query.side_effect = track_query
+        mock_db.commit.side_effect = lambda: call_order.append("commit")
 
-        # Run main
-        main()
+        executor = DumpExecutor(mock_s3, mock_db, RetryPolicy())
+        executor.execute({"query": "SELECT 1", "prefix": "p1"}, dump_count=1)
+        executor.execute({"query": "SELECT 2", "prefix": "p2"}, dump_count=2)
 
         # Expect: read_sql, commit, read_sql, commit (interleaved)
         # NOT: read_sql, read_sql, commit, commit (batched)
