@@ -21,7 +21,7 @@ idna==3.11
 isodate==0.7.2
 jmespath==1.1.0
 jsonpath-ng==1.8.0
-lxml==5.4.0
+lxml==6.1.0
 multidict==6.7.1
 nest-asyncio==1.6.0
 numpy==2.4.3
