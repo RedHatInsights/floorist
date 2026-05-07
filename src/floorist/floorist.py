@@ -7,14 +7,14 @@ from pandas import DataFrame
 
 from floorist.config import get_config, Config
 from os import environ
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy import exc as sqlalchemy_exc
-from uuid import UUID
 
 import awswrangler as wr
 import boto3
 import logging
 import pandas as pd
+import psycopg2.extensions
 import time
 import yaml
 
@@ -103,11 +103,24 @@ class S3Client:
 
 
 class DatabaseClient:
+    _uuid_caster = psycopg2.extensions.new_type(
+        (2950,),  # PostgreSQL OID for UUID type: select oid from pg_type where typname='uuid'
+        "UUID_AS_STRING",
+        psycopg2.STRING,
+    )
+
     def __init__(self, config: Config):
         self.engine = create_engine(
             f"postgresql://{config.database_username}:{config.database_password}@{config.database_hostname}/{config.database_name}"
         )
+        event.listen(self.engine, "connect", self._register_uuid_caster)
         self.conn = self.engine.connect().execution_options(stream_results=True)
+
+    @staticmethod
+    def _register_uuid_caster(dbapi_conn, connection_record):
+        # Convert all UUID types to strings automatically.  The s3.write_parquet method will fail if
+        # columns remain the UUID type
+        psycopg2.extensions.register_type(DatabaseClient._uuid_caster, dbapi_conn)
 
     def execute_query(self, query, chunksize) -> Generator[DataFrame, None, None]:
         result = pd.read_sql(query, self.conn, chunksize=chunksize)
@@ -137,19 +150,8 @@ class DumpExecutor:
         logging.debug("[Dump #%d] Query: %s", dump_count, query)
         cursor = self.db_client.execute_query(query, chunksize)
 
-        uuids = {}
-
         chunk = 1
         for data in cursor:
-            if len(uuids) == 0 and len(data) > 0:
-                # Detect any columns with UUID
-                for column in data:
-                    if isinstance(data[column][0], UUID):
-                        logging.debug("[Dump #%d] UUID column detected: %s", dump_count, column)
-                        uuids[column] = "string"
-
-            # Convert any columns with UUID type to string
-            data = data.astype(uuids)
             self.s3_client.write_parquet(data, target, path)
             if len(data) > 0:
                 logging.info("[Dump #%d] Written parquet chunk #%d", dump_count, chunk)
