@@ -24,6 +24,10 @@ RETRY_DELAY = 5  # seconds
 
 LOG_FMT = "[%(asctime)s] [%(levelname)s] %(message)s"
 
+# Stable OID for the UUID type, assigned in src/include/catalog/pg_type.dat in the PostgreSQL source.
+# Verify with: SELECT oid FROM pg_type WHERE typname = 'uuid'
+_PG_UUID_OID = 2950
+
 _RETRYABLE_DB_ERROR_PATTERNS = (
     "SerializationFailure",
     "conflict with recovery",
@@ -104,20 +108,25 @@ class S3Client:
 
 class DatabaseClient:
     _uuid_caster = psycopg2.extensions.new_type(
-        (2950,),  # PostgreSQL OID for UUID type: select oid from pg_type where typname='uuid'
+        (_PG_UUID_OID,),
         "UUID_AS_STRING",
         psycopg2.STRING,
     )
 
     def __init__(self, config: Config):
         self.engine = create_engine(
-            f"postgresql://{config.database_username}:{config.database_password}@{config.database_hostname}/{config.database_name}"
+            f"postgresql+psycopg2://{config.database_username}:{config.database_password}@{config.database_hostname}/{config.database_name}"
         )
         event.listen(self.engine, "connect", self._register_uuid_caster)
         self.conn = self.engine.connect().execution_options(stream_results=True)
 
     @staticmethod
     def _register_uuid_caster(dbapi_conn, connection_record):
+        if not isinstance(dbapi_conn, psycopg2.extensions.connection):
+            raise TypeError(
+                f"Expected a psycopg2 connection, got {type(dbapi_conn).__name__}. "
+                "The UUID type caster requires psycopg2."
+            )
         # Convert all UUID types to strings automatically.  The s3.write_parquet method will fail if
         # columns remain the UUID type
         psycopg2.extensions.register_type(DatabaseClient._uuid_caster, dbapi_conn)
