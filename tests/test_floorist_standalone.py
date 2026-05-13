@@ -278,12 +278,14 @@ class TestS3BucketFallback:
                 environ[key] = settings[key]
 
     @patch("floorist.floorist.DumpExecutor")
+    @patch("floorist.floorist.event")
     @patch("floorist.floorist.create_engine")
     @patch("floorist.floorist.wr.s3.list_directories")
     def test_list_directories_retries_with_trailing_slash(
         self,
         mock_s3_list,
         mock_create_engine,
+        mock_event,
         mock_executor,
     ):
         mock_s3_list.side_effect = [
@@ -310,6 +312,7 @@ class TestS3BucketFallback:
         instance.execute.assert_called()
 
     @patch("floorist.floorist.DumpExecutor")
+    @patch("floorist.floorist.event")
     # Defensive mock
     @patch("floorist.floorist.create_engine")
     @patch("floorist.floorist.wr.s3.list_directories")
@@ -317,6 +320,7 @@ class TestS3BucketFallback:
         self,
         mock_s3_list,
         mock_create_engine,
+        mock_event,
         mock_executor,
     ):
         # Simulate a non-AccessDenied ClientError from S3, e.g. NoSuchBucket
@@ -340,6 +344,7 @@ class TestS3BucketFallback:
         mock_executor.return_value.execute.assert_not_called()
 
     @patch("floorist.floorist.DumpExecutor")
+    @patch("floorist.floorist.event")
     # Defensive mock
     @patch("floorist.floorist.create_engine")
     @patch("floorist.floorist.wr.s3.list_directories")
@@ -347,6 +352,7 @@ class TestS3BucketFallback:
         self,
         mock_s3_list,
         mock_create_engine,
+        mock_event,
         mock_executor,
     ):
         mock_s3_list.side_effect = [
