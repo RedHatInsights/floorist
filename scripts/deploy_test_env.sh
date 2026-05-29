@@ -3,7 +3,12 @@ set -euo pipefail
 
 echo "Started deploy_test_env.sh script"
 
+oc apply -f ./tests/templates/openshift-template.yaml
+oc new-app --template=floorist-stack
 
+oc get all
+
+sleep 300
 
 # echo "Image URL: ${IMAGE_URL}"
 # echo "Image Digest: ${IMAGE_DIGEST}"
