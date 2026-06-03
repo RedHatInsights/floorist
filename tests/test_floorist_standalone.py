@@ -2,8 +2,9 @@ import botocore.exceptions
 import pandas as pd
 import pytest
 import yaml
+from datetime import date
 
-from floorist.floorist import main, RetryPolicy, RetryResult, DumpExecutor, MAX_RETRIES, RETRY_DELAY
+from floorist.floorist import main, RetryPolicy, RetryResult, DumpExecutor, MAX_RETRIES, RETRY_DELAY, S3Client
 from os import environ
 from sqlalchemy import exc as sqlalchemy_exc
 from unittest.mock import Mock, patch
@@ -399,4 +400,78 @@ class TestTransactionIsolation:
         # NOT: read_sql, read_sql, commit, commit (batched)
         assert call_order == ["read_sql", "commit", "read_sql", "commit"], (
             f"Expected interleaved pattern, got: {call_order}"
+        )
+
+
+@pytest.mark.standalone
+class TestWriteParquetEmptyResult:
+    @staticmethod
+    def _s3_client(bucket_name, *, region="us-east-1", endpoint="http://minio:9000"):
+        config = Mock()
+        config.bucket_name = bucket_name
+        config.bucket_url = endpoint
+        config.bucket_access_key = "access-key"
+        config.bucket_secret_key = "secret-key"
+        config.bucket_region = region
+        with patch("floorist.floorist.boto3.setup_default_session"):
+            return S3Client(config)
+
+    @patch("floorist.floorist.date")
+    @patch("floorist.floorist.wr.s3.to_parquet")
+    @patch("floorist.floorist.wr._utils.client")
+    def test_empty_export_splits_bucket_with_embedded_prefix(self, mock_client_fn, mock_to_parquet, mock_date):
+        """AWS_BUCKET may embed a key prefix; empty exports must still write a folder marker."""
+        mock_date.today.return_value = date(2026, 6, 3)
+        mock_s3 = Mock()
+        mock_client_fn.return_value = mock_s3
+        client = self._s3_client(
+            "export-bucket/object-prefix/",
+            region="us-west-2",
+            endpoint="https://s3.us-west-2.amazonaws.com",
+        )
+
+        path, target = client.make_path("metrics/daily_export")
+        client.write_parquet(pd.DataFrame(), target, path)
+
+        mock_to_parquet.assert_not_called()
+        mock_s3.put_object.assert_called_once_with(
+            Bucket="export-bucket",
+            Body="",
+            Key="object-prefix/metrics/daily_export/year_created=2026/month_created=6/day_created=3/",
+        )
+
+    @patch("floorist.floorist.date")
+    @patch("floorist.floorist.wr.s3.to_parquet")
+    @patch("floorist.floorist.wr._utils.client")
+    def test_empty_export_keeps_simple_bucket_from_make_path_target(self, mock_client_fn, mock_to_parquet, mock_date):
+        mock_date.today.return_value = date(2026, 6, 3)
+        mock_s3 = Mock()
+        mock_client_fn.return_value = mock_s3
+        client = self._s3_client("floorist")
+
+        path, target = client.make_path("empty")
+        client.write_parquet(pd.DataFrame(), target, path)
+
+        mock_to_parquet.assert_not_called()
+        mock_s3.put_object.assert_called_once_with(
+            Bucket="floorist",
+            Body="",
+            Key="empty/year_created=2026/month_created=6/day_created=3/",
+        )
+
+    @patch("floorist.floorist.wr.s3.to_parquet")
+    @patch("floorist.floorist.wr._utils.client")
+    def test_nonempty_export_still_uses_awswrangler(self, mock_client_fn, mock_to_parquet):
+        mock_s3 = Mock()
+        mock_client_fn.return_value = mock_s3
+        client = self._s3_client("export-bucket/object-prefix/")
+        path = "metrics/snapshots/year_created=2026/month_created=6/day_created=3"
+        target = f"s3://{client.bucket_name}/{path}"
+        data = pd.DataFrame({"id": [1]})
+
+        client.write_parquet(data, target, path)
+
+        mock_s3.put_object.assert_not_called()
+        mock_to_parquet.assert_called_once_with(
+            data, target, index=False, compression="gzip", dataset=True, mode="append"
         )
