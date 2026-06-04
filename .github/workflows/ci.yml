@@ -1,0 +1,162 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PG_IMAGE: quay.io/sclorg/postgresql-16-c9s:c9s
+  MINIO_IMAGE: quay.io/minio/minio:RELEASE.2025-06-13T11-33-47Z
+  MC_IMAGE: quay.io/minio/mc:RELEASE.2025-05-21T01-59-54Z
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run ruff format
+        id: ruff-format
+        continue-on-error: true
+        uses: astral-sh/ruff-action@v3
+        with:
+          args: format --check src tests
+
+      - name: Run ruff check
+        id: ruff-check
+        continue-on-error: true
+        uses: astral-sh/ruff-action@v3
+        with:
+          args: check src tests
+
+      - name: Fail if either check failed
+        if: steps.ruff-format.outcome == 'failure' || steps.ruff-check.outcome == 'failure'
+        run: exit 1
+
+  pytest:
+    name: Pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore Docker image cache
+        id: docker-cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/docker-images
+          key: docker-images-${{ env.PG_IMAGE }}-${{ env.MINIO_IMAGE }}-${{ env.MC_IMAGE }}
+
+      - name: Load cached Docker images
+        if: steps.docker-cache.outputs.cache-hit == 'true'
+        run: |
+          docker load -i /tmp/docker-images/postgresql.tar
+          docker load -i /tmp/docker-images/minio.tar
+          docker load -i /tmp/docker-images/mc.tar
+
+      - name: Pull Docker images
+        if: steps.docker-cache.outputs.cache-hit != 'true'
+        run: |
+          docker pull ${{ env.PG_IMAGE }}
+          docker pull ${{ env.MINIO_IMAGE }}
+          docker pull ${{ env.MC_IMAGE }}
+          mkdir -p /tmp/docker-images
+          docker save -o /tmp/docker-images/postgresql.tar ${{ env.PG_IMAGE }}
+          docker save -o /tmp/docker-images/minio.tar ${{ env.MINIO_IMAGE }}
+          docker save -o /tmp/docker-images/mc.tar ${{ env.MC_IMAGE }}
+
+      - name: Start PostgreSQL
+        run: |
+          docker run -d --name db -p 5432:5432 \
+            -e POSTGRES_HOST_AUTH_METHOD=trust \
+            -e POSTGRESQL_ADMIN_PASSWORD=flooristadmin \
+            -e POSTGRESQL_PASSWORD=floorist \
+            -e POSTGRESQL_USER=floorist \
+            -e POSTGRESQL_DATABASE=floorist \
+            -v ${{ github.workspace }}/tests/postgresql.conf:/opt/app-root/src/postgresql-cfg/postgresql.conf:z \
+            -v ${{ github.workspace }}/tests/pg_hba.conf:/pg_hba.conf:z \
+            -v ${{ github.workspace }}/tests/enable-extensions.sh:/opt/app-root/src/postgresql-start/enable-extensions.sh:z \
+            ${{ env.PG_IMAGE }}
+
+      - name: Start MinIO
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=floorist \
+            -e MINIO_ROOT_PASSWORD=floorist \
+            ${{ env.MINIO_IMAGE }} server /data
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            tests/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt -r tests/requirements.txt
+          pip install -e .
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -yqq postgresql-client
+
+      - name: Wait for PostgreSQL
+        run: |
+          for i in $(seq 1 30); do
+            pg_isready -h localhost -p 5432 -U postgres && exit 0
+            sleep 2
+          done
+          echo "PostgreSQL failed to become ready"
+          exit 1
+
+      - name: Wait for MinIO
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:9000/minio/health/live && exit 0
+            sleep 1
+          done
+          echo "MinIO failed to become ready"
+          exit 1
+
+      - name: Create MinIO bucket
+        run: |
+          docker run --rm --net=host --entrypoint sh ${{ env.MC_IMAGE }} -c '
+            mc alias set myminio http://localhost:9000 floorist floorist &&
+            mc mb myminio/floorist &&
+            mc anonymous set download myminio/floorist
+          '
+
+      - name: Write test environment
+        run: |
+          cat > tests/env.yaml << 'EOF'
+          AWS_ENDPOINT: 'http://localhost:9000'
+          AWS_ACCESS_KEY_ID: 'floorist'
+          AWS_SECRET_ACCESS_KEY: 'floorist'
+          AWS_REGION: 'us-east-1'
+          AWS_BUCKET: 'floorist'
+          POSTGRES_SERVICE_HOST: 'localhost'
+          POSTGRESQL_USER: 'floorist'
+          POSTGRESQL_PASSWORD: 'floorist'
+          POSTGRESQL_DATABASE: 'floorist'
+          FLOORPLAN_FILE: 'tests/floorplan_valid.yaml'
+          EOF
+
+      - name: Run pytest
+        run: pytest -vv --junit-xml=test-results.xml
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results.xml
