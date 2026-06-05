@@ -100,7 +100,14 @@ class S3Client:
         if len(data) > 0:
             wr.s3.to_parquet(data, target, index=False, compression="gzip", dataset=True, mode="append")
         else:
-            wr._utils.client("s3").put_object(Bucket=self.bucket_name, Body="", Key=path + "/")
+            name = self.bucket_name.rstrip("/")
+            if "/" in name:
+                bucket, prefix = name.split("/", 1)
+                key = f"{prefix.rstrip('/')}/{path.lstrip('/')}"
+            else:
+                bucket = name
+                key = path
+            wr._utils.client("s3").put_object(Bucket=bucket, Body="", Key=f"{key.rstrip('/')}/")
 
     def cleanup(self, target):
         wr.s3.delete_objects(target)
