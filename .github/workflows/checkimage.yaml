@@ -19,13 +19,12 @@ jobs:
           docker run --rm -u 0 quay.io/redhat-services-prod/insights-management-tenant/insights-floorist/floorist:latest sh -c \
             'microdnf update -y $(cat /opt/installedpackages) > /dev/null; rpm -q $(cat /opt/installedpackages) | sort | sha256sum | cut -d " " -f 1' \
             >> .baseimagedigest
-      - name: Do change if the digest changed
-        run: |
-          git config user.name 'Update-a-Bot'
-          git config user.email 'insights@redhat.com'
-          git add .baseimagedigest
-          git commit -m "chore(image): update and rebuild image" || echo "No new changes"
-      - name: Create pull request
+      - name: Open or update PR if the digest changed
         uses: peter-evans/create-pull-request@v8
         with:
           title: 'chore(image): update base image'
+          branch: automation/base-image
+          commit-message: 'chore(image): update and rebuild image'
+          committer: 'Update-a-Bot <insights@redhat.com>'
+          author: 'Update-a-Bot <insights@redhat.com>'
+          sign-commits: true
