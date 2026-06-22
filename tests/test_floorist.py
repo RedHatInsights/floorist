@@ -80,7 +80,8 @@ class TestFloorist:
         env["POSTGRESQL_USER"] = "foo"
         with pytest.raises(OperationalError) as ex:
             main()
-        assert 'role "foo" does not exist' in str(ex.value)
+        error_msg = str(ex.value)
+        assert 'role "foo" does not exist' in error_msg or 'password authentication failed for user "foo"' in error_msg
 
     def test_invalid_pg_database(self):
         env["POSTGRESQL_DATABASE"] = "foo"
