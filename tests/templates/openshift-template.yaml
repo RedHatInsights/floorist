@@ -1,0 +1,241 @@
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  name: floorist-stack
+  annotations:
+    description: "PostgreSQL and MinIO stack for Floorist application"
+    tags: "database,postgresql,storage,minio"
+    iconClass: "icon-postgresql"
+objects:
+# PostgreSQL Secret
+- apiVersion: v1
+  kind: Secret
+  metadata:
+    name: postgresql-credentials
+  type: Opaque
+  stringData:
+    POSTGRESQL_USER: ${POSTGRESQL_USER}
+    POSTGRESQL_PASSWORD: ${POSTGRESQL_PASSWORD}
+    POSTGRESQL_DATABASE: ${POSTGRESQL_DATABASE}
+    POSTGRESQL_ADMIN_PASSWORD: ${POSTGRESQL_ADMIN_PASSWORD}
+
+# MinIO Secret
+- apiVersion: v1
+  kind: Secret
+  metadata:
+    name: minio-credentials
+  type: Opaque
+  stringData:
+    MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+    MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+
+# PostgreSQL Init Scripts ConfigMap
+- apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: postgresql-init-scripts
+    labels:
+      app: postgresql
+  data:
+    enable-extensions.sh: |
+      #!/bin/bash
+      psql "$POSTGRESQL_DATABASE" -c 'CREATE EXTENSION IF NOT EXISTS "uuid-ossp";'
+
+# PostgreSQL Service
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: db
+    labels:
+      app: postgresql
+  spec:
+    ports:
+    - port: 5432
+      targetPort: 5432
+      protocol: TCP
+    selector:
+      app: postgresql
+    type: ClusterIP
+
+# PostgreSQL Deployment
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: postgresql
+    labels:
+      app: postgresql
+  spec:
+    replicas: 1
+    selector:
+      matchLabels:
+        app: postgresql
+    template:
+      metadata:
+        labels:
+          app: postgresql
+      spec:
+        containers:
+        - name: postgresql
+          image: ${POSTGRESQL_IMAGE}
+          ports:
+          - containerPort: 5432
+            protocol: TCP
+          env:
+          - name: POSTGRESQL_USER
+            valueFrom:
+              secretKeyRef:
+                name: postgresql-credentials
+                key: POSTGRESQL_USER
+          - name: POSTGRESQL_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: postgresql-credentials
+                key: POSTGRESQL_PASSWORD
+          - name: POSTGRESQL_DATABASE
+            valueFrom:
+              secretKeyRef:
+                name: postgresql-credentials
+                key: POSTGRESQL_DATABASE
+          - name: POSTGRESQL_ADMIN_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: postgresql-credentials
+                key: POSTGRESQL_ADMIN_PASSWORD
+          volumeMounts:
+          - name: init-scripts
+            mountPath: /opt/app-root/src/postgresql-start/enable-extensions.sh
+            subPath: enable-extensions.sh
+        volumes:
+        - name: init-scripts
+          configMap:
+            name: postgresql-init-scripts
+            defaultMode: 0755
+
+# MinIO Service
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: minio
+    labels:
+      app: minio
+  spec:
+    ports:
+    - port: 9000
+      targetPort: 9000
+      protocol: TCP
+    selector:
+      app: minio
+    type: ClusterIP
+
+# MinIO Deployment
+- apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: minio
+    labels:
+      app: minio
+  spec:
+    replicas: 1
+    selector:
+      matchLabels:
+        app: minio
+    template:
+      metadata:
+        labels:
+          app: minio
+      spec:
+        containers:
+        - name: minio
+          image: ${MINIO_IMAGE}
+          command:
+          - minio
+          - server
+          - /data
+          ports:
+          - containerPort: 9000
+            protocol: TCP
+          env:
+          - name: MINIO_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: minio-credentials
+                key: MINIO_ACCESS_KEY
+          - name: MINIO_SECRET_KEY
+            valueFrom:
+              secretKeyRef:
+                name: minio-credentials
+                key: MINIO_SECRET_KEY
+
+# MinIO Bucket Creation Job
+- apiVersion: batch/v1
+  kind: Job
+  metadata:
+    name: minio-createbucket
+    labels:
+      app: minio-setup
+  spec:
+    template:
+      metadata:
+        labels:
+          app: minio-setup
+      spec:
+        restartPolicy: OnFailure
+        containers:
+        - name: createbucket
+          image: ${MINIO_MC_IMAGE}
+          env:
+          - name: MC_CONFIG_DIR
+            value: /tmp/.mc
+          command:
+          - /bin/sh
+          - -c
+          - |
+            until /usr/bin/mc alias set myminio http://minio:9000 ${MINIO_ACCESS_KEY} ${MINIO_SECRET_KEY} >/dev/null 2>&1; do
+              echo "Waiting for MinIO to be ready..."
+              sleep 2
+            done
+            /usr/bin/mc mb myminio/${MINIO_BUCKET_NAME} --ignore-existing
+            /usr/bin/mc anonymous set download myminio/${MINIO_BUCKET_NAME}
+            echo "Bucket created successfully"
+
+parameters:
+- name: POSTGRESQL_IMAGE
+  description: "PostgreSQL container image"
+  value: "quay.io/sclorg/postgresql-16-c9s:c9s"
+  required: true
+- name: POSTGRESQL_USER
+  description: "PostgreSQL user"
+  value: "floorist"
+  required: true
+- name: POSTGRESQL_PASSWORD
+  description: "PostgreSQL password"
+  value: "floorist"
+  required: true
+- name: POSTGRESQL_DATABASE
+  description: "PostgreSQL database name"
+  value: "floorist"
+  required: true
+- name: POSTGRESQL_ADMIN_PASSWORD
+  description: "PostgreSQL admin password"
+  value: "flooristadmin"
+  required: true
+- name: MINIO_IMAGE
+  description: "MinIO container image"
+  value: "quay.io/minio/minio:RELEASE.2025-06-13T11-33-47Z"
+  required: true
+- name: MINIO_MC_IMAGE
+  description: "MinIO Client container image"
+  value: "quay.io/minio/mc:RELEASE.2025-05-21T01-59-54Z"
+  required: true
+- name: MINIO_ACCESS_KEY
+  description: "MinIO access key"
+  value: "floorist"
+  required: true
+- name: MINIO_SECRET_KEY
+  description: "MinIO secret key"
+  value: "floorist"
+  required: true
+- name: MINIO_BUCKET_NAME
+  description: "MinIO bucket name to create"
+  value: "floorist"
+  required: true

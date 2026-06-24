@@ -168,11 +168,16 @@ parameters:
 
 ## Testing
 
-For testing the tool, you will need PostgreSQL and minio, there's a Docker Compose file provided in the `test` folder with everything prepared and configured. The configuration for these two services has to be stored in the `tests/env.yaml` file, for the Docker Compose setup it's enough to copy the the `tests/env.yaml.example` to make it work. However, if you would like to bring your own PostgreSQL server or maybe use a real S3 bucket, you have to edit these values accordingly. The tests can be started via `pytest`.
-
+For testing the tool, you will need PostgreSQL and minio.
 There's two ways of running the tests, you can run them locally using `pytest` from your localhost or you can run everything from containers like we do on our CI process.
 
-### Running tests locally
+Currently there are 2 ways how to start the tests:
+1) docker-compose/podman compose
+2) in local Minikube cluster
+
+
+### Running tests via docker-compose/podman-compose
+There's a Docker Compose file provided in the `test` folder with everything prepared and configured. The configuration for these two services has to be stored in the `tests/env.yaml` file, for the Docker Compose setup it's enough to copy the the `tests/env.yaml.example` to make it work. However, if you would like to bring your own PostgreSQL server or maybe use a real S3 bucket, you have to edit these values accordingly. The tests can be started via `pytest`.
 
 #### Explicit
 ```bash
@@ -208,28 +213,31 @@ make compose-down
 
 ### Running tests from containers
 
-Alternatively, you can also run the same process the CI system runs, locally, by running the `pr_check.sh` script with the `LOCAL_BUILD=true` environment variable set.
-
-Set credentials for images repos first:
-
+Alternatively, you can also run the same process the CI system runs, locally, by using Minikube.
+Build the test image first and push it to quay repo:
 ```
-export QUAY_REGISTRY="quay.io"
-export QUAY_USER="<quay user>"
-export QUAY_TOKEN="<quay token>"
-export RH_REGISTRY_USER="<rh regsitry user>"
-export RH_REGISTRY_TOKEN="<rh registry token>"
+podman build  -f Dockerfile -t quay.io/user/floorist:latest
+podman push quay.io/user/floorist:latest
+export CONTAINER_IMAGE="quay.io/user/floorist:latest"
 ```
 
+Start Minikube:
 ```
-LOCAL_BUILD=true ./pr_check.sh
+minikube start
 ```
 
-the **pr_check.sh** script will:
+Deploy postgresql/minio resources and start test job:
+```
+scripts/deploy_test_env.sh
+```
 
-- Build a new image for Floorist using the test dependencies (see [build_deploy.sh](build_deploy.sh) for details)
-- Run the tests in a container using the aforementioned image (see [run-tests.sh](run-tests.sh) for details)
+the **scripts/deploy_test_env.sh** script will:
 
-please **NOTE** - since the *pr_check.sh* script creates and deletes the containers it uses each time, it has to create a custom *env.yaml* file with the correct container names (i.e., to connect to the right database and the right container with the MinIO bucket), overriding the existing env file in the process (the local tests/env.yaml.example file has the default `localhost` value for when running `pytest`locally, so make sure this file has the correct values between each run if you run it both from the pr_check.sh script and the local `pytest` command)
+- Deploys all the resources (postgresql/minio) needed for testing into Minikube
+- Minikube pulls the image which is defined via `CONTAINER_IMAGE` variable
+- Run the tests in a container using the aforementioned image
+
+Same script is used to start ITS Tekton testing in PR in on-pr and on-push pipelines. For more information what templates are used, [check documentaion](tests/templates/README.md)
 
 ## Contributing
 Bug reports and pull requests are welcome, here are some ideas for improvement:

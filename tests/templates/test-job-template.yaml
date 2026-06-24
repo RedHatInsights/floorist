@@ -1,0 +1,142 @@
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  name: floorist-test-job
+  annotations:
+    description: "Job to run Floorist pytest suite against deployed PostgreSQL and MinIO services"
+parameters:
+- name: CONTAINER_IMAGE
+  description: "Floorist test container image (built from the 'test' Dockerfile stage)"
+  required: true
+- name: JOB_NAME
+  description: "Name of the Job resource"
+  value: "floorist-test-job"
+  required: true
+- name: POSTGRES_SERVICE_HOST
+  description: "Hostname of the PostgreSQL service"
+  value: "db"
+  required: true
+- name: POSTGRESQL_USER
+  description: "PostgreSQL user"
+  value: "floorist"
+  required: true
+- name: POSTGRESQL_PASSWORD
+  description: "PostgreSQL password"
+  value: "floorist"
+  required: true
+- name: POSTGRESQL_DATABASE
+  description: "PostgreSQL database name"
+  value: "floorist"
+  required: true
+- name: MINIO_ACCESS_KEY
+  description: "MinIO access key"
+  value: "floorist"
+  required: true
+- name: MINIO_SECRET_KEY
+  description: "MinIO secret key"
+  value: "floorist"
+  required: true
+- name: AWS_ENDPOINT
+  description: "MinIO/S3 endpoint URL"
+  value: "http://minio:9000"
+  required: true
+- name: AWS_REGION
+  description: "AWS/S3 region"
+  value: "us-east-1"
+  required: true
+- name: AWS_BUCKET
+  description: "S3 bucket name"
+  value: "floorist"
+  required: true
+- name: FLOORPLAN_FILE
+  description: "Path to the floorplan YAML file"
+  value: "tests/floorplan_valid.yaml"
+  required: true
+objects:
+- apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: test-env-config
+    labels:
+      app: floorist-tests
+  data:
+    env.yaml: |
+      AWS_ENDPOINT: '${AWS_ENDPOINT}'
+      AWS_ACCESS_KEY_ID: '${MINIO_ACCESS_KEY}'
+      AWS_SECRET_ACCESS_KEY: '${MINIO_SECRET_KEY}'
+      AWS_REGION: '${AWS_REGION}'
+      AWS_BUCKET: '${AWS_BUCKET}'
+      POSTGRES_SERVICE_HOST: '${POSTGRES_SERVICE_HOST}'
+      POSTGRESQL_USER: '${POSTGRESQL_USER}'
+      POSTGRESQL_PASSWORD: '${POSTGRESQL_PASSWORD}'
+      POSTGRESQL_DATABASE: '${POSTGRESQL_DATABASE}'
+      FLOORPLAN_FILE: '${FLOORPLAN_FILE}'
+- apiVersion: batch/v1
+  kind: Job
+  metadata:
+    name: ${JOB_NAME}
+    labels:
+      app: floorist-tests
+  spec:
+    backoffLimit: 0
+    activeDeadlineSeconds: 300
+    template:
+      metadata:
+        labels:
+          app: floorist-tests
+      spec:
+        restartPolicy: Never
+        containers:
+        - name: test-runner
+          image: ${CONTAINER_IMAGE}
+          workingDir: /opt/app-root
+          command:
+          - /bin/sh
+          - -c
+          - |
+            echo "=== Running Floorist tests ==="
+            bin/pytest -vvv -s tests/
+          env:
+          - name: POSTGRES_SERVICE_HOST
+            value: "${POSTGRES_SERVICE_HOST}"
+          - name: POSTGRESQL_USER
+            valueFrom:
+              secretKeyRef:
+                name: postgresql-credentials
+                key: POSTGRESQL_USER
+          - name: POSTGRESQL_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: postgresql-credentials
+                key: POSTGRESQL_PASSWORD
+          - name: POSTGRESQL_DATABASE
+            valueFrom:
+              secretKeyRef:
+                name: postgresql-credentials
+                key: POSTGRESQL_DATABASE
+          - name: AWS_ENDPOINT
+            value: "${AWS_ENDPOINT}"
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: minio-credentials
+                key: MINIO_ACCESS_KEY
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: minio-credentials
+                key: MINIO_SECRET_KEY
+          - name: AWS_REGION
+            value: "${AWS_REGION}"
+          - name: AWS_BUCKET
+            value: "${AWS_BUCKET}"
+          - name: FLOORPLAN_FILE
+            value: "${FLOORPLAN_FILE}"
+          volumeMounts:
+          - name: test-env
+            mountPath: /opt/app-root/tests/env.yaml
+            subPath: env.yaml
+        volumes:
+        - name: test-env
+          configMap:
+            name: test-env-config
