@@ -32,29 +32,28 @@ PARAM_FILE=tests/k8s.env ./scripts/deploy_test_env.sh
 
 ```bash
 # Deploy infrastructure stack with defaults
-oc process --local -f tests/templates/openshift-template.yaml -o yaml | kubectl apply -f -
+oc process --local -f tests/templates/openshift-template.yaml -o yaml | oc apply -f -
 
 # Or with custom parameters
 oc process --local -f tests/templates/openshift-template.yaml \
   -p POSTGRESQL_PASSWORD=mypassword \
   -p MINIO_SECRET_KEY=mysecret \
-  -o yaml | kubectl apply -f -
+  -o yaml | oc apply -f -
 
 # Or with a param file
 oc process --local -f tests/templates/openshift-template.yaml \
   --param-file=tests/k8s.env \
-  -o yaml | kubectl apply -f -
+  -o yaml | oc apply -f -
 
 # Deploy test job
 oc process --local -f tests/templates/test-job-template.yaml \
   -p CONTAINER_IMAGE="your-image:tag" \
-  -o yaml | kubectl apply -f -
+  -o yaml | oc apply -f -
 ```
 
 ## Requirements
 
-- **oc** CLI (for `oc process --local` template rendering)
-- **kubectl** or **oc** (for applying resources to the cluster)
+- **oc** CLI (for template rendering and applying resources to the cluster)
 
 The `oc` binary can be downloaded standalone from
 [Red Hat mirror](https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable/)

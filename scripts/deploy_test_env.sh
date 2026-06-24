@@ -3,17 +3,10 @@ set -euo pipefail
 
 echo "Started deploy_test_env.sh script"
 
-# Determine available CLI tool (prefer kubectl, fall back to oc)
-if command -v kubectl &>/dev/null; then
-    KUBE_CLI="kubectl"
-elif command -v oc &>/dev/null; then
-    KUBE_CLI="oc"
-else
-    echo "ERROR: Neither kubectl nor oc found in PATH"
+if ! command -v oc &>/dev/null; then
+    echo "ERROR: oc not found in PATH"
     exit 1
 fi
-
-echo "Using CLI tool: ${KUBE_CLI}"
 
 # Validate required variables
 if [[ -z "${CONTAINER_IMAGE:-}" ]]; then
@@ -35,9 +28,9 @@ echo ""
 echo "=== Deploying infrastructure stack ==="
 oc process --local -f ./tests/templates/openshift-template.yaml \
     ${PARAM_FILE_ARGS} \
-    -o yaml | ${KUBE_CLI} apply -f -
+    -o yaml | oc apply -f -
 
-${KUBE_CLI} get all
+oc get all
 
 echo "Test CONTAINER image: ${CONTAINER_IMAGE}"
 
@@ -47,7 +40,7 @@ export JOB_NAME="${JOB_NAME:-floorist-test-job}"
 export TMPDIR="${TMPDIR:-/tmp}"
 
 # Clean up previous test job if it exists (Jobs are immutable)
-${KUBE_CLI} delete job "${JOB_NAME}" --ignore-not-found
+oc delete job "${JOB_NAME}" --ignore-not-found
 
 # Deploy the test job
 echo ""
@@ -56,23 +49,23 @@ oc process --local -f ./tests/templates/test-job-template.yaml \
     ${PARAM_FILE_ARGS} \
     -p CONTAINER_IMAGE="${CONTAINER_IMAGE}" \
     -p JOB_NAME="${JOB_NAME}" \
-    -o yaml | ${KUBE_CLI} apply -f -
+    -o yaml | oc apply -f -
 
 sleep 5
 
 echo ""
 echo "=== Job Status ==="
-${KUBE_CLI} get jobs
+oc get jobs
 
 echo ""
 echo "=== Job Logs ==="
 
-${KUBE_CLI} logs -f job/minio-createbucket
+oc logs -f job/minio-createbucket
 
 echo ""
 echo "=== Waiting for test job pod to start ==="
-${KUBE_CLI} wait --for=condition=ready pod -l job-name="${JOB_NAME}" --timeout=120s || true
+oc wait --for=condition=ready pod -l job-name="${JOB_NAME}" --timeout=120s || true
 
-${KUBE_CLI} logs -f "job/${JOB_NAME}"
+oc logs -f "job/${JOB_NAME}"
 
-${KUBE_CLI} delete "job/${JOB_NAME}"
+oc delete "job/${JOB_NAME}"
