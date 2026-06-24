@@ -51,6 +51,15 @@ oc process --local -f tests/templates/test-job-template.yaml \
   -o yaml | oc apply -f -
 ```
 
+### Environment variables
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `CONTAINER_IMAGE` | Yes | — | Floorist test image to run |
+| `PARAM_FILE` | No | — | Path to an env file passed to `oc process --param-file` |
+| `JOB_NAME` | No | `floorist-test-job` | Name of the test job |
+| `POD_READY_TIMEOUT` | No | `120s` | Timeout for waiting on the test job pod to become ready |
+
 ## Requirements
 
 - **oc** CLI (for template rendering and applying resources to the cluster)

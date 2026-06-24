@@ -64,7 +64,7 @@ oc logs -f job/minio-createbucket
 
 echo ""
 echo "=== Waiting for test job pod to start ==="
-oc wait --for=condition=ready pod -l job-name="${JOB_NAME}" --timeout=120s || true
+oc wait --for=condition=ready pod -l job-name="${JOB_NAME}" --timeout="${POD_READY_TIMEOUT:-120s}" || true
 
 oc logs -f "job/${JOB_NAME}"
 
