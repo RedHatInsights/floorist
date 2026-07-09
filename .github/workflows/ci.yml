@@ -25,14 +25,14 @@ jobs:
       - name: Run ruff format
         id: ruff-format
         continue-on-error: true
-        uses: astral-sh/ruff-action@v3
+        uses: astral-sh/ruff-action@v4.0.0
         with:
           args: format --check src tests
 
       - name: Run ruff check
         id: ruff-check
         continue-on-error: true
-        uses: astral-sh/ruff-action@v3
+        uses: astral-sh/ruff-action@v4.0.0
         with:
           args: check src tests
 
@@ -92,7 +92,7 @@ jobs:
             ${{ env.MINIO_IMAGE }} server /data
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.14'
           cache: pip
@@ -156,7 +156,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-results
           path: test-results.xml
