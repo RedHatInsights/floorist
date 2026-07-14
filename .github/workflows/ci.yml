@@ -25,14 +25,14 @@ jobs:
       - name: Run ruff format
         id: ruff-format
         continue-on-error: true
-        uses: astral-sh/ruff-action@v4.0.0
+        uses: astral-sh/ruff-action@v4.1.0
         with:
           args: format --check src tests
 
       - name: Run ruff check
         id: ruff-check
         continue-on-error: true
-        uses: astral-sh/ruff-action@v4.0.0
+        uses: astral-sh/ruff-action@v4.1.0
         with:
           args: check src tests
 
