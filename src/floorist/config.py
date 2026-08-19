@@ -1,11 +1,9 @@
-from app_common_python import LoadedConfig
-from app_common_python import isClowderEnabled
-from os import environ, access, R_OK
+from os import R_OK, access, environ
 from os.path import isfile
 from urllib.parse import urlparse
 
-
 import attr
+from app_common_python import LoadedConfig, isClowderEnabled
 
 
 @attr.s
@@ -87,7 +85,7 @@ def _validate_config(config):
         raise ValueError("Floorplan filename not defined!")
 
     if not isfile(config.floorplan_filename) or not access(config.floorplan_filename, R_OK):
-        raise IOError(f"File '{config.floorplan_filename}' does not exist or is not readable")
+        raise OSError(f"File '{config.floorplan_filename}' does not exist or is not readable")
 
     if not config.database_hostname:
         raise ValueError("Database host not defined")

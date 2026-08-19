@@ -1,13 +1,14 @@
+from datetime import date
+from os import environ
+from unittest.mock import Mock, patch
+
 import botocore.exceptions
 import pandas as pd
 import pytest
 import yaml
-from datetime import date
-
-from floorist.floorist import main, RetryPolicy, RetryResult, DumpExecutor, MAX_RETRIES, RETRY_DELAY, S3Client
-from os import environ
 from sqlalchemy import exc as sqlalchemy_exc
-from unittest.mock import Mock, patch
+
+from floorist.floorist import MAX_RETRIES, RETRY_DELAY, DumpExecutor, RetryPolicy, RetryResult, S3Client, main
 
 
 @pytest.mark.standalone
@@ -88,8 +89,8 @@ class TestS3CleanupFailure:
     def mock_db(self):
         return Mock()
 
-    @patch("floorist.floorist.logging")
-    def test_retry_fails_when_s3_cleanup_fails(self, mock_logging, mock_db, mock_s3):
+    @patch("floorist.floorist.logger")
+    def test_retry_fails_when_s3_cleanup_fails(self, mock_logger, mock_db, mock_s3):
         """Test that retry attempt fails immediately when S3 cleanup fails."""
         mock_s3.cleanup.side_effect = Exception("Access Denied")
 
@@ -109,7 +110,7 @@ class TestS3CleanupFailure:
 
         assert result is False, "Dump should fail when S3 cleanup fails"
         mock_s3.cleanup.assert_called_once()
-        mock_logging.exception.assert_any_call("[Dump #%d] S3 cleanup failed, cannot retry", 1)
+        mock_logger.exception.assert_any_call("[Dump #%d] S3 cleanup failed, cannot retry", 1)
         assert mock_db.execute_query.call_count == 1, "Should not retry after S3 cleanup fails"
 
 
@@ -130,8 +131,8 @@ class TestRetryIntegration:
     def mock_db(self):
         return Mock()
 
-    @patch("floorist.floorist.logging")
-    def test_single_retry_succeeds(self, mock_logging, mock_s3, mock_db):
+    @patch("floorist.floorist.logger")
+    def test_single_retry_succeeds(self, mock_logger, mock_s3, mock_db):
         """Test that a single retry is successful after SerializationFailure."""
         test_df = pd.DataFrame({"id": [1, 2, 3], "value": ["a", "b", "c"]})
 
@@ -156,10 +157,10 @@ class TestRetryIntegration:
         mock_s3.cleanup.assert_called_once()
         mock_s3.write_parquet.assert_called_once()
 
-        mock_logging.info.assert_any_call("[Dump #%d] Retry %d of %d (attempt %d total)", 1, 1, MAX_RETRIES - 1, 2)
+        mock_logger.info.assert_any_call("[Dump #%d] Retry %d of %d (attempt %d total)", 1, 1, MAX_RETRIES - 1, 2)
 
-    @patch("floorist.floorist.logging")
-    def test_failure_mid_chunk_processing_retries_successfully(self, mock_logging, mock_s3, mock_db):
+    @patch("floorist.floorist.logger")
+    def test_failure_mid_chunk_processing_retries_successfully(self, mock_logger, mock_s3, mock_db):
         """Test that failure during chunk processing triggers retry and succeeds."""
         chunk1 = pd.DataFrame({"id": [1, 2], "value": ["a", "b"]})
         chunk2 = pd.DataFrame({"id": [3, 4], "value": ["c", "d"]})
@@ -194,14 +195,14 @@ class TestRetryIntegration:
         # Check that chunk writes were logged (first attempt: chunks 1, 2; retry: chunks 1, 2, 3)
         chunk_log_calls = [
             c
-            for c in mock_logging.info.call_args_list
+            for c in mock_logger.info.call_args_list
             if len(c[0]) >= 2 and c[0][0] == "[Dump #%d] Written parquet chunk #%d"
         ]
         assert len(chunk_log_calls) == 5, "Should log all chunk writes (2 + 3)"
 
-    @patch("floorist.floorist.logging")
+    @patch("floorist.floorist.logger")
     @patch("floorist.floorist.time.sleep")
-    def test_exhausted_retries_fails(self, mock_sleep, mock_logging, mock_s3, mock_db):
+    def test_exhausted_retries_fails(self, mock_sleep, mock_logger, mock_s3, mock_db):
         """Test that exhausting all retries results in failure."""
         mock_db.execute_query.side_effect = sqlalchemy_exc.OperationalError(
             "statement",
@@ -229,8 +230,8 @@ class TestRetryIntegration:
         assert mock_s3.cleanup.call_count == MAX_RETRIES - 1, "Should cleanup S3 before each retry"
         mock_s3.write_parquet.assert_not_called()
 
-    @patch("floorist.floorist.logging")
-    def test_multiple_dumps_with_one_retry(self, mock_logging, mock_s3, mock_db):
+    @patch("floorist.floorist.logger")
+    def test_multiple_dumps_with_one_retry(self, mock_logger, mock_s3, mock_db):
         """Test that retry logic works correctly when called multiple times for different dumps."""
         df1 = pd.DataFrame({"id": [1, 2]})
         df2 = pd.DataFrame({"id": [3, 4]})
