@@ -1,15 +1,17 @@
+import logging
+from datetime import date
+from os import environ as env
+from tempfile import NamedTemporaryFile
+
 import awswrangler as wr
 import boto3
+import botocore.exceptions
 import pytest
 import yaml
-import logging
-
 from botocore.exceptions import NoCredentialsError
-from datetime import date
-from floorist.floorist import main
-from os import environ as env
 from sqlalchemy.exc import OperationalError
-from tempfile import NamedTemporaryFile
+
+from floorist.floorist import main
 
 
 class TestFloorist:
@@ -54,7 +56,7 @@ class TestFloorist:
 
     def test_invalid_s3_credentials(self):
         del env["AWS_ACCESS_KEY_ID"]
-        with pytest.raises(Exception):
+        with pytest.raises((NoCredentialsError, botocore.exceptions.ClientError, TypeError)):
             main()
 
     def test_unset_s3_bucket(self):
@@ -106,19 +108,17 @@ class TestFloorist:
 
     @pytest.mark.skip(reason="broken by issue #2")
     def test_empty_floorplan(self):
-        with pytest.raises(yaml.parser.ParserError):
-            with NamedTemporaryFile(mode="w+t") as tempfile:
-                env["FLOORPLAN_FILE"] = tempfile.name
-                main()
+        with pytest.raises(yaml.parser.ParserError), NamedTemporaryFile(mode="w+t") as tempfile:
+            env["FLOORPLAN_FILE"] = tempfile.name
+            main()
 
     @pytest.mark.skip(reason="broken by issue #3")
     def test_invalid_floorplan(self):
-        with pytest.raises(yaml.parser.ParserError):
-            with NamedTemporaryFile(mode="w+t") as tempfile:
-                tempfile.write("Some invalid floorplan")
-                tempfile.flush()
-                env["FLOORPLAN_FILE"] = tempfile.name
-                main()
+        with pytest.raises(yaml.parser.ParserError), NamedTemporaryFile(mode="w+t") as tempfile:
+            tempfile.write("Some invalid floorplan")
+            tempfile.flush()
+            env["FLOORPLAN_FILE"] = tempfile.name
+            main()
 
     def test_floorplan_without_query(self, caplog):
         env["FLOORPLAN_FILE"] = "tests/floorplan_without_query.yaml"
@@ -165,7 +165,7 @@ class TestFloorist:
         assert wr.s3.list_directories(prefix, boto3_session=session) == [f"{prefix}/series/"]
         assert len(wr.s3.list_objects(f"{prefix}/series/", boto3_session=session)) == 1000
         df = wr.s3.read_parquet(f"{prefix}/series/", boto3_session=session)
-        assert len(df), 1000000
+        assert len(df) == 1000000
 
     def test_floorplan_with_custom_chunksize(self, caplog, session):
         prefix = f"s3://{env['AWS_BUCKET']}"
@@ -175,7 +175,7 @@ class TestFloorist:
         assert wr.s3.list_directories(prefix, boto3_session=session) == [f"{prefix}/series/"]
         assert len(wr.s3.list_objects(f"{prefix}/series/", boto3_session=session)) == 77
         df = wr.s3.read_parquet(f"{prefix}/series/", boto3_session=session)
-        assert len(df), 1000
+        assert len(df) == 1000
 
     def test_floorplan_with_zero_chunksize(self, caplog, session):
         prefix = f"s3://{env['AWS_BUCKET']}"
@@ -185,7 +185,7 @@ class TestFloorist:
         assert wr.s3.list_directories(prefix, boto3_session=session) == [f"{prefix}/series/"]
         assert len(wr.s3.list_objects(f"{prefix}/series/", boto3_session=session)) == 1
         df = wr.s3.read_parquet(f"{prefix}/series/", boto3_session=session)
-        assert len(df), 1000
+        assert len(df) == 1000
 
     def test_floorplan_with_one_failing_dump(self, caplog, session):
         prefix = f"s3://{env['AWS_BUCKET']}"
@@ -199,7 +199,7 @@ class TestFloorist:
 
     def test_floorplan_with_empty_dataset(self, caplog, session):
         prefix = f"s3://{env['AWS_BUCKET']}"
-        datepath = f"{date.today().strftime('year_created=%Y/month_created=%-m/day_created=%-d')}"
+        datepath = f"{date.today().strftime('year_created=%Y/month_created=%-m/day_created=%-d')}"  # noqa: DTZ011
         env["FLOORPLAN_FILE"] = "tests/floorplan_with_empty_dataset.yaml"
         main()
         assert "Dumped 1 from total of 1" in caplog.text
@@ -217,4 +217,4 @@ class TestFloorist:
         assert wr.s3.list_directories(prefix, boto3_session=session) == [f"{prefix}/valid/"]
         assert len(wr.s3.list_objects(f"{prefix}/valid/", boto3_session=session)) == 1
         df = wr.s3.read_parquet(f"{prefix}/valid/", boto3_session=session)
-        assert len(df), 3
+        assert len(df) == 3

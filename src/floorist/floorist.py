@@ -1,22 +1,24 @@
+import logging
+import sys
+import time
+from collections.abc import Generator
 from datetime import date
 from enum import Enum
-from typing import Generator
-
-import botocore.exceptions
-from pandas import DataFrame
-
-from floorist.config import get_config, Config
 from os import environ
-from sqlalchemy import create_engine, event
-from sqlalchemy import exc as sqlalchemy_exc
+
+logger = logging.getLogger(__name__)
 
 import awswrangler as wr
 import boto3
-import logging
+import botocore.exceptions
 import pandas as pd
 import psycopg2.extensions
-import time
 import yaml
+from pandas import DataFrame
+from sqlalchemy import create_engine, event
+from sqlalchemy import exc as sqlalchemy_exc
+
+from floorist.config import Config, get_config
 
 # Retry configuration
 MAX_RETRIES = 3
@@ -92,7 +94,7 @@ class S3Client:
                 raise
 
     def make_path(self, prefix):
-        path = f"{prefix}/{date.today().strftime('year_created=%Y/month_created=%-m/day_created=%-d')}"
+        path = f"{prefix}/{date.today().strftime('year_created=%Y/month_created=%-m/day_created=%-d')}"  # noqa: DTZ011 — local time is intentional
         target = f"s3://{self.bucket_name}/{path}"
         return path, target
 
@@ -163,19 +165,19 @@ class DumpExecutor:
         self.retry_policy = retry_policy
 
     def _write_chunks(self, path, target, query, chunksize, dump_count):
-        logging.debug("[Dump #%d] Query: %s", dump_count, query)
+        logger.debug("[Dump #%d] Query: %s", dump_count, query)
         cursor = self.db_client.execute_query(query, chunksize)
 
         chunk = 1
         for data in cursor:
             self.s3_client.write_parquet(data, target, path)
             if len(data) > 0:
-                logging.info("[Dump #%d] Written parquet chunk #%d", dump_count, chunk)
+                logger.info("[Dump #%d] Written parquet chunk #%d", dump_count, chunk)
                 chunk += 1
             else:
-                logging.info("[Dump #%d] Empty folder created for empty result", dump_count)
+                logger.info("[Dump #%d] Empty folder created for empty result", dump_count)
 
-        logging.debug("[Dump #%d] Dumped %s to %s", dump_count, query, path)
+        logger.debug("[Dump #%d] Dumped %s to %s", dump_count, query, path)
 
     def execute(self, row, dump_count) -> bool:
         """
@@ -192,14 +194,14 @@ class DumpExecutor:
             path, target = self.s3_client.make_path(row["prefix"])
             query = row["query"]
             chunksize = row.get("chunksize", 1000) or None
-        except KeyError as ex:
-            logging.exception("[Dump #%d] %s", dump_count, ex)
+        except KeyError:
+            logger.exception("[Dump #%d] invalid config row: %r", dump_count, row)
             return False
 
         for attempt in range(self.retry_policy.max_retries):
             try:
                 if attempt > 0:
-                    logging.info(
+                    logger.info(
                         "[Dump #%d] Retry %d of %d (attempt %d total)",
                         dump_count,
                         attempt,
@@ -209,7 +211,7 @@ class DumpExecutor:
                     try:
                         self.s3_client.cleanup(target)
                     except Exception:
-                        logging.exception("[Dump #%d] S3 cleanup failed, cannot retry", dump_count)
+                        logger.exception("[Dump #%d] S3 cleanup failed, cannot retry", dump_count)
                         return False
 
                 self._write_chunks(path, target, query, chunksize, dump_count)
@@ -222,24 +224,24 @@ class DumpExecutor:
                 sqlalchemy_exc.OperationalError,
                 sqlalchemy_exc.PendingRollbackError,
             ) as ex:
-                logging.warning("[Dump #%d] Database error, rolling back", dump_count)
+                logger.warning("[Dump #%d] Database error, rolling back", dump_count)
                 try:
                     self.db_client.rollback()
-                except Exception as rollback_ex:
-                    logging.exception("[Dump #%d] Rollback failed: %s", dump_count, rollback_ex)
+                except Exception:
+                    logger.exception("[Dump #%d] Rollback failed", dump_count)
 
                 retry_result = self.retry_policy.evaluate(ex, attempt)
 
                 if retry_result == RetryResult.FAILURE:
-                    logging.exception("[Dump #%d] %s", dump_count, ex)
+                    logger.exception("[Dump #%d] Non-retryable database error", dump_count)
                     break
 
                 if retry_result == RetryResult.EXHAUSTED:
-                    logging.exception("[Dump #%d] Retries exhausted %s", dump_count, ex)
+                    logger.exception("[Dump #%d] Retries exhausted", dump_count)
                     break
 
                 backoff_time = self.retry_policy.backoff_delay(attempt)
-                logging.warning(
+                logger.warning(
                     "[Dump #%d] Retrying in %d seconds due to: %s",
                     dump_count,
                     backoff_time,
@@ -248,9 +250,8 @@ class DumpExecutor:
                 time.sleep(backoff_time)
                 continue
 
-            except Exception as ex:
-                # Non-retryable exceptions
-                logging.exception("[Dump #%d] %s", dump_count, ex)
+            except Exception:
+                logger.exception("[Dump #%d] Unexpected error", dump_count)
                 break
 
         return False  # Dump failed
@@ -262,10 +263,10 @@ class Floorist:
 
         s3_client: S3Client = S3Client(config)
         s3_client.verify()
-        logging.info("Successfully connected to the S3 bucket")
+        logger.info("Successfully connected to the S3 bucket")
 
         self.db_client: DatabaseClient = DatabaseClient(config)
-        logging.info("Successfully connected to the database")
+        logger.info("Successfully connected to the database")
 
         retry_policy: RetryPolicy = RetryPolicy(MAX_RETRIES, RETRY_DELAY)
         self.executor = DumpExecutor(s3_client, self.db_client, retry_policy)
@@ -287,9 +288,9 @@ class Floorist:
                 if self.executor.execute(row, dump_count):
                     dumped_count += 1
 
-        logging.info("Dumped %d from total of %d", dumped_count, dump_count)
+        logger.info("Dumped %d from total of %d", dumped_count, dump_count)
         if dumped_count != dump_count:
-            exit(1)
+            sys.exit(1)
 
 
 def _configure_loglevel():
