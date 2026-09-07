@@ -1,15 +1,15 @@
 aenum==3.1.17
 aiohttp==3.14.3
 aiosignal==1.4.0
-app-common-python==0.2.9
+app-common-python==0.3.0
 asn1crypto==1.5.1
 async-timeout<5.0.2
 attrs==26.1.0
 awswrangler==3.17.1
 backoff==2.2.1
 beautifulsoup4==4.15.0
-boto3==1.43.77
-botocore==1.43.77
+boto3==1.43.88
+botocore==1.43.88
 certifi==2026.7.22
 charset-normalizer==3.5.1
 decorator==5.3.1
@@ -38,7 +38,7 @@ pyarrow<25.0.2
 PyMySQL==1.2.0
 pyparsing==3.3.2
 python-dateutil==2.9.0.post0
-python-utils==4.0.0
+python-utils==4.0.1
 pytz==2026.3.post1
 PyYAML==6.0.3
 rdflib==7.6.0
