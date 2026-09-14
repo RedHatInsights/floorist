@@ -16,7 +16,7 @@ decorator==5.3.1
 et-xmlfile==2.0.0
 frozenlist==1.8.0
 greenlet==3.5.5
-gremlinpython==3.8.2
+gremlinpython==3.8.1
 idna==3.19
 isodate==0.7.2
 jmespath==1.1.0
