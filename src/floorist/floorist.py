@@ -10,7 +10,6 @@ logger = logging.getLogger(__name__)
 
 import awswrangler as wr
 import boto3
-import botocore.exceptions
 import pandas as pd
 import psycopg2.extensions
 import yaml
@@ -81,17 +80,11 @@ class S3Client:
         )
 
     def verify(self):
-        # Fails if can't connect to S3 or the bucket does not exist
-        try:
-            wr.s3.list_directories(f"s3://{self.bucket_name}")
-        except botocore.exceptions.ClientError as e:
-            # On an exception, try again with a trailing slash since the client might not have
-            # ListBuckets permission on the bucket name itself, but only on items beneath it.
-            error_code = e.response.get("Error", {}).get("Code")
-            if error_code in {"AccessDenied"}:
-                wr.s3.list_directories(f"s3://{self.bucket_name.rstrip('/')}/")
-            else:
-                raise
+        bucket = self.bucket_name.split("/", 1)[0]
+        kwargs = {}
+        if self.bucket_url:
+            kwargs["endpoint_url"] = self.bucket_url
+        boto3.client("s3", **kwargs).head_bucket(Bucket=bucket)
 
     def make_path(self, prefix):
         path = f"{prefix}/{date.today().strftime('year_created=%Y/month_created=%-m/day_created=%-d')}"  # noqa: DTZ011 — local time is intentional
