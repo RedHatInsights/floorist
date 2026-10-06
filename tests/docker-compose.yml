@@ -22,7 +22,7 @@ services:
         - "${PWD}/tests/enable-extensions.sh:/opt/app-root/src/postgresql-start/enable-extensions.sh:z"
 
   minio:
-    image: quay.io/minio/minio:RELEASE.2025-06-13T11-33-47Z
+    image: docker.io/pgsty/silo:latest
     command: server /data
     ports:
       - 9000:9000
@@ -31,7 +31,7 @@ services:
       - MINIO_SECRET_KEY=floorist
 
   createbucket:
-    image: quay.io/minio/mc:RELEASE.2025-05-21T01-59-54Z
+    image: docker.io/pgsty/mc:latest
     depends_on:
       - minio
     entrypoint: /bin/sh

@@ -148,7 +148,7 @@ objects:
         - name: minio
           image: ${MINIO_IMAGE}
           command:
-          - minio
+          - silo
           - server
           - /data
           ports:
@@ -221,11 +221,11 @@ parameters:
   required: true
 - name: MINIO_IMAGE
   description: "MinIO container image"
-  value: "quay.io/minio/minio:RELEASE.2025-06-13T11-33-47Z"
+  value: "docker.io/pgsty/silo:latest"
   required: true
 - name: MINIO_MC_IMAGE
   description: "MinIO Client container image"
-  value: "quay.io/minio/mc:RELEASE.2025-05-21T01-59-54Z"
+  value: "docker.io/pgsty/mc:latest"
   required: true
 - name: MINIO_ACCESS_KEY
   description: "MinIO access key"
