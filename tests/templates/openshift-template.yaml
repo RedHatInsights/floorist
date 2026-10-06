@@ -148,7 +148,7 @@ objects:
         - name: minio
           image: ${MINIO_IMAGE}
           command:
-          - minio
+          - silo
           - server
           - /data
           ports:
