@@ -66,9 +66,9 @@ class TestFloorist:
 
     def test_missing_s3_bucket(self):
         env["AWS_BUCKET"] = "foo"
-        with pytest.raises(Exception) as ex:
+        with pytest.raises(botocore.exceptions.ClientError) as ex:
             main()
-        assert "bucket does not exist" in str(ex.value)
+        assert ex.value.response["Error"]["Code"] in {"404", "NoSuchBucket"}
 
     @pytest.mark.parametrize(
         "key", ["POSTGRES_SERVICE_HOST", "POSTGRESQL_USER", "POSTGRESQL_DATABASE", "POSTGRESQL_PASSWORD"]

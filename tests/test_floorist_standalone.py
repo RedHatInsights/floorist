@@ -269,8 +269,8 @@ class TestRetryIntegration:
 
 
 @pytest.mark.standalone
-class TestS3BucketFallback:
-    """Test that main() retries list_directories with a trailing slash on ClientError."""
+class TestS3BucketVerify:
+    """Test that S3Client.verify() uses head_bucket to check bucket access."""
 
     @pytest.fixture(autouse=True)
     def setup_env(self):
@@ -282,25 +282,19 @@ class TestS3BucketFallback:
     @patch("floorist.floorist.DumpExecutor")
     @patch("floorist.floorist.event")
     @patch("floorist.floorist.create_engine")
-    @patch("floorist.floorist.wr.s3.list_directories")
-    def test_list_directories_retries_with_trailing_slash(
+    @patch("floorist.floorist.boto3.client")
+    def test_verify_calls_head_bucket(
         self,
-        mock_s3_list,
+        mock_boto_client,
         mock_create_engine,
         mock_event,
         mock_executor,
     ):
-        mock_s3_list.side_effect = [
-            botocore.exceptions.ClientError(
-                {"Error": {"Code": "AccessDenied", "Message": "Access Denied"}},
-                "ListBuckets",
-            ),
-            [],
-        ]
+        mock_s3 = Mock()
+        mock_boto_client.return_value = mock_s3
 
-        mock_conn = Mock()
         mock_engine = Mock()
-        mock_engine.connect.return_value.execution_options.return_value = mock_conn
+        mock_engine.connect.return_value.execution_options.return_value = Mock()
         mock_create_engine.return_value = mock_engine
 
         instance = mock_executor.return_value
@@ -308,72 +302,31 @@ class TestS3BucketFallback:
 
         main()
 
-        assert mock_s3_list.call_count == 2
-        mock_s3_list.assert_any_call("s3://floorist")
-        mock_s3_list.assert_any_call("s3://floorist/")
+        mock_boto_client.assert_called_with("s3", endpoint_url=environ.get("AWS_ENDPOINT"))
+        mock_s3.head_bucket.assert_called_once_with(Bucket="floorist")
         instance.execute.assert_called()
 
     @patch("floorist.floorist.DumpExecutor")
     @patch("floorist.floorist.event")
-    # Defensive mock
     @patch("floorist.floorist.create_engine")
-    @patch("floorist.floorist.wr.s3.list_directories")
-    def test_list_directories_does_not_retry_on_non_access_denied_client_error(
+    @patch("floorist.floorist.boto3.client")
+    def test_verify_propagates_error(
         self,
-        mock_s3_list,
+        mock_boto_client,
         mock_create_engine,
         mock_event,
         mock_executor,
     ):
-        # Simulate a non-AccessDenied ClientError from S3, e.g. NoSuchBucket
-        mock_s3_list.side_effect = botocore.exceptions.ClientError(
-            error_response={
-                "Error": {
-                    "Code": "NoSuchBucket",
-                    "Message": "The specified bucket does not exist",
-                }
-            },
-            operation_name="ListDirectories",
+        mock_s3 = Mock()
+        mock_s3.head_bucket.side_effect = botocore.exceptions.ClientError(
+            {"Error": {"Code": "404", "Message": "Not Found"}},
+            "HeadBucket",
         )
-        # main() should propagate the error as-is and not attempt a retry
-        with pytest.raises(botocore.exceptions.ClientError) as excinfo:
-            main()
-        # Ensure the exact error code is preserved
-        assert excinfo.value.response["Error"]["Code"] == "NoSuchBucket"
-        # list_directories should be called exactly once and not retried
-        assert mock_s3_list.call_count == 1
-        # _dump_with_retry must not be invoked for non-AccessDenied errors
-        mock_executor.return_value.execute.assert_not_called()
-
-    @patch("floorist.floorist.DumpExecutor")
-    @patch("floorist.floorist.event")
-    # Defensive mock
-    @patch("floorist.floorist.create_engine")
-    @patch("floorist.floorist.wr.s3.list_directories")
-    def test_list_directories_retries_with_trailing_slash_and_fails(
-        self,
-        mock_s3_list,
-        mock_create_engine,
-        mock_event,
-        mock_executor,
-    ):
-        mock_s3_list.side_effect = [
-            botocore.exceptions.ClientError(
-                {"Error": {"Code": "AccessDenied", "Message": "Access Denied"}},
-                "ListBuckets",
-            ),
-            botocore.exceptions.ClientError(
-                {"Error": {"Code": "AccessDenied", "Message": "Access Denied"}},
-                "ListBuckets",
-            ),
-        ]
+        mock_boto_client.return_value = mock_s3
 
         with pytest.raises(botocore.exceptions.ClientError):
             main()
 
-        assert mock_s3_list.call_count == 2
-        mock_s3_list.assert_any_call("s3://floorist")
-        mock_s3_list.assert_any_call("s3://floorist/")
         mock_executor.return_value.execute.assert_not_called()
 
 
