@@ -34,6 +34,9 @@ filterwarnings = [
 [tool.ruff]
 line-length = 120
 
+[tool.ruff.lint]
+extend-select = ["DTZ011"]
+
 [tool.ruff.lint.isort]
 order-by-type = true
 relative-imports-order = "closest-to-furthest"
