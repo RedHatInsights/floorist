@@ -8,9 +8,9 @@ attrs==26.1.0
 awswrangler==3.17.1
 backoff==2.2.1
 beautifulsoup4==4.15.0
-boto3==1.43.114
-botocore==1.43.114
-certifi==2026.7.22
+boto3==1.43.118
+botocore==1.43.118
+certifi==2026.10.19
 charset-normalizer==3.5.2
 decorator==5.3.1
 et-xmlfile==2.0.0
@@ -20,7 +20,7 @@ gremlinpython==3.8.1
 idna==3.20
 isodate==0.7.2
 jmespath==1.1.0
-jsonpath-ng==1.10.1
+jsonpath-ng==1.12.0
 # lxml==5.4.0
 lxml==6.1.0
 multidict==7.1.0
@@ -29,7 +29,7 @@ numpy==2.5.4
 openpyxl==3.1.5
 opensearch-py==3.2.0
 packaging==26.3
-pandas==3.0.6
+pandas==3.1.0
 pg8000==1.31.5
 ply==3.11
 progressbar2==4.6.0
@@ -38,18 +38,18 @@ pyarrow<26.0.1
 PyMySQL==1.2.3
 pyparsing==3.3.3
 python-dateutil==2.9.0.post0
-python-utils==4.1.2
+python-utils==4.1.4
 pytz==2026.5
 PyYAML==6.0.3
 rdflib==7.6.0
 redshift-connector==2.2.0
 requests==2.34.2
 requests-aws4auth==1.4.0
-s3transfer==0.19.2
-scramp==1.4.17
+s3transfer==0.19.3
+scramp==1.4.18
 six==1.17.0
-soupsieve==3.0.3
+soupsieve==3.0.4
 SPARQLWrapper==2.0.0
-SQLAlchemy==2.1.4
+SQLAlchemy==2.1.6
 urllib3==2.8.0
 yarl==1.25.1
