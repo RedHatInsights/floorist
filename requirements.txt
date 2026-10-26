@@ -37,7 +37,7 @@ psycopg2==2.9.13
 pyarrow<26.0.1
 PyMySQL==1.2.3
 pyparsing==3.3.3
-python-dateutil==3.0.0
+python-dateutil==2.9.0.post0
 python-utils==4.1.4
 pytz==2026.5
 PyYAML==6.0.3
